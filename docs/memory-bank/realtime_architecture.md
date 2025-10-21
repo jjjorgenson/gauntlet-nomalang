@@ -1,0 +1,73 @@
+```mermaid
+%% NomaLang Realtime Architecture - Cursor-Ready Mermaid Diagrams
+
+%% 1. Reliable Message Delivery (Single + Group Chats)
+sequenceDiagram
+    participant UserA as Sender (Client A)
+    participant Supabase as Supabase Backend
+    participant Group as Group Recipients (Clients B, C, D)
+
+    Note over UserA: Compose message<br>Generate UUID<br>Save in SQLite (pending)
+    UserA->>Supabase: insertMessage(UUID, text, sender_id, conversation_id)
+    alt Network OK
+        Supabase->>Supabase: INSERT ON CONFLICT (UUID) DO NOTHING
+        Supabase-->>UserA: ACK (message saved)
+        UserA->>UserA: Mark as "sent"
+        Supabase-->>Group: Broadcast (new message)
+        loop Each recipient
+            Group->>Supabase: updateMessageStatus(UUID, delivered=true)
+            Supabase-->>UserA: Update (delivered for user)
+            Group->>Supabase: updateMessageStatus(UUID, read=true)
+            Supabase-->>UserA: Update (read for user)
+        end
+    else Network Down
+        UserA->>UserA: Queue message (SQLite)
+        UserA->>Supabase: Retry on reconnect
+        Supabase->>Supabase: Deduplicate via UUID
+        Supabase-->>UserA: ACK (message saved)
+        Supabase-->>Group: Realtime broadcast
+    end
+```
+
+```mermaid
+%% 2. Typing Indicator (Reliable, Efficient)
+sequenceDiagram
+    participant UserA as Client A (Sender)
+    participant Supabase as Supabase Realtime
+    participant Group as Group Recipients
+
+    Note over UserA: Keypress detected<br>Immediate typing:true broadcast
+    UserA->>Supabase: presence.update({ typing: true, conversation_id })
+    Supabase-->>Group: typing:true (show indicator)
+
+    Note over UserA: Continue typing<br>Debounce(500ms)
+    UserA->>Supabase: (optional) typing:true update
+
+    Note over UserA: 3s heartbeat trigger
+    UserA->>Supabase: typing:true (heartbeat)
+
+    Note over UserA: Stops typing
+    UserA->>UserA: Hold-open(3s)
+    alt Still idle after hold-open
+        UserA->>Supabase: presence.update({ typing: false })
+        Supabase-->>Group: typing:false (clear indicator)
+    end
+```
+
+```mermaid
+%% 3. Presence Tracking
+sequenceDiagram
+    participant UserA as Client A
+    participant Supabase as Supabase Realtime
+    participant Group as Group Members
+
+    Note over UserA: Active session → heartbeat every 15s
+    UserA->>Supabase: presence.update({ online:true, last_seen: now, conversation_id })
+    Supabase-->>Group: online:true (update group presence)
+
+    alt UserA disconnects or backgrounded
+        Supabase-->>Group: presence.remove(UserA)
+        Group->>Group: Update "last seen" timestamps
+    end
+```
+

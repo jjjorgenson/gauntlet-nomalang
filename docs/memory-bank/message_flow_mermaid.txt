@@ -1,0 +1,28 @@
+%% NomaLang Message Flow - Cursor-Ready Mermaid Diagram
+
+sequenceDiagram
+    participant Client as Mobile Client (Expo)
+    participant Supabase as Supabase Backend
+    participant Edge as Supabase Edge Function (AI)
+    participant OpenAI as OpenAI API
+    participant Recipient as Other Clients
+
+    Note over Client: Compose message → Generate UUID → Save locally (pending)
+    Client->>Supabase: Insert message (idempotent)
+    Supabase-->>Client: ACK (sent)
+    Supabase-->>Recipient: Broadcast new message
+
+    Recipient->>Supabase: updateMessageStatus(delivered=true)
+    Supabase-->>Client: Update delivery status
+
+    Recipient->>Supabase: updateMessageStatus(read=true)
+    Supabase-->>Client: Update read status
+
+    Note over Supabase: Trigger Edge Function (AI enrichment)
+    Supabase->>Edge: New message payload
+    Edge->>OpenAI: Translate / Detect / Summarize
+    OpenAI-->>Edge: AI response
+    Edge->>Supabase: Store translation / metadata
+    Supabase-->>Clients: Broadcast enriched message
+
+    Note over Client: Offline? Queue message → Retry on reconnect

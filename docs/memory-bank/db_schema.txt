@@ -1,0 +1,63 @@
+%% NomaLang Database Schema - Cursor-Ready Mermaid ERD
+
+erDiagram
+    USERS ||--o{ CONVERSATIONS : participates_in
+    USERS ||--o{ PARTICIPANTS : has_membership
+    CONVERSATIONS ||--o{ PARTICIPANTS : includes
+    CONVERSATIONS ||--o{ MESSAGES : contains
+    MESSAGES ||--o{ MESSAGE_STATUS : has_status
+    MESSAGES ||--o{ TRANSLATIONS : has_translation
+
+    USERS {
+        uuid id PK
+        string email
+        string display_name
+        string avatar_url
+        string preferred_language
+        boolean auto_translate_enabled
+        string push_token
+        timestamp created_at
+    }
+
+    CONVERSATIONS {
+        uuid id PK
+        string name
+        string type  // 'direct' or 'group'
+        uuid created_by FK -> USERS.id
+        timestamp created_at
+    }
+
+    PARTICIPANTS {
+        uuid id PK
+        uuid user_id FK -> USERS.id
+        uuid conversation_id FK -> CONVERSATIONS.id
+        timestamp joined_at
+    }
+
+    MESSAGES {
+        uuid id PK
+        uuid conversation_id FK -> CONVERSATIONS.id
+        uuid sender_id FK -> USERS.id
+        text content
+        string type // 'text', 'image', 'voice'
+        json metadata // language detection, formality, etc.
+        timestamp created_at
+    }
+
+    MESSAGE_STATUS {
+        uuid id PK
+        uuid message_id FK -> MESSAGES.id
+        uuid recipient_id FK -> USERS.id
+        boolean delivered
+        boolean read
+        timestamp delivered_at
+        timestamp read_at
+    }
+
+    TRANSLATIONS {
+        uuid id PK
+        uuid message_id FK -> MESSAGES.id
+        string target_lang
+        text translation_text
+        timestamp created_at
+    }
