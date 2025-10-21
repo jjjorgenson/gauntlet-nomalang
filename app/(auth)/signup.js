@@ -3,6 +3,7 @@ import { View, StyleSheet, Alert } from 'react-native'
 import { TextInput, Button, Text, Surface } from 'react-native-paper'
 import { Link, router } from 'expo-router'
 import { useAuth } from '../../lib/auth'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 export default function SignupScreen() {
   const [email, setEmail] = useState('')
@@ -40,17 +41,13 @@ export default function SignupScreen() {
 
       if (error) {
         Alert.alert('Error', error.message)
+      } else if (data?.user && !data?.session) {
+        // Email verification required
+        await AsyncStorage.setItem('signup_email', email)
+        router.push('/(auth)/verify-email')
       } else {
-        Alert.alert(
-          'Success',
-          'Account created! Please check your email for confirmation link.',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.replace('/(auth)/login')
-            }
-          ]
-        )
+        // User is already verified and logged in
+        router.replace('/(main)')
       }
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred')
@@ -109,15 +106,15 @@ export default function SignupScreen() {
           style={styles.input}
         />
 
-        <Button
-          mode="contained"
-          onPress={handleSignUp}
-          loading={loading}
-          disabled={loading}
-          style={styles.button}
-        >
-          {loading ? 'Creating account...' : 'Create Account'}
-        </Button>
+            <Button
+              mode="contained"
+              onPress={handleSignUp}
+              loading={loading}
+              disabled={loading || !email || !password || !displayName}
+              style={styles.button}
+            >
+              {loading ? 'Creating account...' : 'Create Account'}
+            </Button>
 
         <View style={styles.footer}>
           <Text variant="bodyMedium">

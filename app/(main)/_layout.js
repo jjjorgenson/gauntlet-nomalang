@@ -30,6 +30,27 @@ export default function MainLayout() {
           headerShown: true
         }}
       />
+      <Stack.Screen
+        name="chat"
+        options={{
+          title: 'Chat',
+          headerShown: true
+        }}
+      />
+      <Stack.Screen
+        name="conversation"
+        options={{
+          title: 'Conversation',
+          headerShown: true
+        }}
+      />
+      <Stack.Screen
+        name="new-chat"
+        options={{
+          title: 'New Chat',
+          headerShown: true
+        }}
+      />
     </Stack>
   )
 }
