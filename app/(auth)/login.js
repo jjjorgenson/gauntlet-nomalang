@@ -12,20 +12,19 @@ export default function LoginScreen() {
 
   const handleSignIn = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields')
+      Alert.alert('Error', 'Please enter email and password')
       return
     }
 
+    console.log({ email, password })
     setLoading(true)
     try {
       const { data, error } = await signIn(email, password)
 
       if (error) {
         Alert.alert('Error', error.message)
-      } else {
-        // User is authenticated, redirect to main app
-        router.replace('/(tabs)')
       }
+      // Success is handled by AuthProvider's onAuthStateChange
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred')
     } finally {

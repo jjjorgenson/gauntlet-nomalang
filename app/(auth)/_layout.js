@@ -10,7 +10,7 @@ export default function AuthLayout() {
     if (!loading) {
       if (user) {
         // User is authenticated, redirect to main app
-        router.replace('/(tabs)')
+        router.replace('/(main)')
       }
       // If not authenticated, stay on auth screens
     }

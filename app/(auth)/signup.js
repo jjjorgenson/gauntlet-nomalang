@@ -13,8 +13,13 @@ export default function SignupScreen() {
   const { signUp } = useAuth()
 
   const handleSignUp = async () => {
-    if (!email || !password || !displayName) {
-      Alert.alert('Error', 'Please fill in all fields')
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter email and password')
+      return
+    }
+
+    if (!displayName) {
+      Alert.alert('Error', 'Please enter display name')
       return
     }
 
@@ -28,6 +33,7 @@ export default function SignupScreen() {
       return
     }
 
+    console.log({ email, password, displayName })
     setLoading(true)
     try {
       const { data, error } = await signUp(email, password, displayName)
@@ -37,7 +43,7 @@ export default function SignupScreen() {
       } else {
         Alert.alert(
           'Success',
-          'Account created! Please check your email to verify your account.',
+          'Account created! Please check your email for confirmation link.',
           [
             {
               text: 'OK',
