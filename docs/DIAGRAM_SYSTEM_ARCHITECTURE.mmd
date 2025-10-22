@@ -1,0 +1,95 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#dcf8c6','secondaryColor':'#005c4b','tertiaryColor':'#fff'}}}%%
+
+graph TB
+    subgraph "Mobile Clients"
+        iOS[iOS App<br/>React Native + Expo]
+        Android[Android App<br/>React Native + Expo]
+    end
+
+    subgraph "Supabase Platform"
+        Auth[Auth Service<br/>JWT Tokens]
+        DB[(PostgreSQL 15<br/>with RLS)]
+        Realtime[Realtime Service<br/>WebSocket]
+        Storage[Storage Service<br/>Voice Memos]
+    end
+
+    subgraph "Vercel Platform"
+        API[API Functions<br/>Node.js Serverless]
+        Webhook1[/api/webhook/message-created]
+        Webhook2[/api/webhook/message-edited]
+        Transcribe[/api/transcribe-voice]
+        Slang[/api/explain-slang]
+        Formality[/api/adjust-formality]
+        Cron[/api/cron/cultural-hints]
+    end
+
+    subgraph "OpenAI Platform"
+        GPT[GPT-4o-mini<br/>Translation & AI]
+        Whisper[Whisper API<br/>Transcription]
+    end
+
+    subgraph "Expo Services"
+        Push[Expo Push<br/>Notifications]
+    end
+
+    %% Client connections
+    iOS -.HTTPS/WSS.-> Auth
+    iOS -.HTTPS/WSS.-> DB
+    iOS -.WSS.-> Realtime
+    iOS -.HTTPS.-> Storage
+    iOS -.HTTPS.-> API
+
+    Android -.HTTPS/WSS.-> Auth
+    Android -.HTTPS/WSS.-> DB
+    Android -.WSS.-> Realtime
+    Android -.HTTPS.-> Storage
+    Android -.HTTPS.-> API
+
+    %% Backend connections
+    DB -->|Webhook Trigger| Webhook1
+    DB -->|Webhook Trigger| Webhook2
+    
+    Webhook1 -->|Service Role| DB
+    Webhook2 -->|Service Role| DB
+    Transcribe -->|Service Role| DB
+    Slang -->|Service Role| DB
+    
+    API --> Webhook1
+    API --> Webhook2
+    API --> Transcribe
+    API --> Slang
+    API --> Formality
+    API --> Cron
+
+    %% AI connections
+    Webhook1 -.HTTPS.-> GPT
+    Webhook2 -.HTTPS.-> GPT
+    Transcribe -.HTTPS.-> Whisper
+    Slang -.HTTPS.-> GPT
+    Formality -.HTTPS.-> GPT
+    Cron -.HTTPS.-> GPT
+
+    %% Storage connections
+    Transcribe -.Read Audio.-> Storage
+    iOS -.Upload Voice.-> Storage
+
+    %% Push notifications
+    Webhook1 -.Send Push.-> Push
+    Webhook2 -.Send Push.-> Push
+    Push -.Deliver.-> iOS
+    Push -.Deliver.-> Android
+
+    %% Cron trigger
+    Cron -.Query.-> DB
+
+    classDef clientClass fill:#007aff,stroke:#005cbf,color:#fff
+    classDef supabaseClass fill:#3ecf8e,stroke:#2ba86f,color:#000
+    classDef vercelClass fill:#000,stroke:#666,color:#fff
+    classDef openaiClass fill:#10a37f,stroke:#0d8b6b,color:#fff
+    classDef expoClass fill:#000020,stroke:#4630eb,color:#fff
+
+    class iOS,Android clientClass
+    class Auth,DB,Realtime,Storage supabaseClass
+    class API,Webhook1,Webhook2,Transcribe,Slang,Formality,Cron vercelClass
+    class GPT,Whisper openaiClass
+    class Push expoClass

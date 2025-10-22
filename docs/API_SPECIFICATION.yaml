@@ -1,0 +1,465 @@
+openapi: 3.0.3
+info:
+  title: Multilingual Family Chat API
+  description: API specification for real-time multilingual messaging application with AI-powered translation, transcription, and contextual features
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: https://your-app.vercel.app
+    description: Production server
+  - url: http://localhost:3000
+    description: Development server
+
+tags:
+  - name: webhooks
+    description: Supabase webhook endpoints
+  - name: ai
+    description: AI-powered features
+  - name: cron
+    description: Scheduled jobs
+
+paths:
+  /api/webhook/message-created:
+    post:
+      tags:
+        - webhooks
+      summary: Handle new message creation
+      description: Webhook triggered by Supabase when new message inserted. Processes translation, slang detection, cultural hints.
+      operationId: handleMessageCreated
+      security:
+        - WebhookAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookPayload'
+            example:
+              type: INSERT
+              table: messages
+              record:
+                id: "550e8400-e29b-41d4-a716-446655440000"
+                conversation_id: "660e8400-e29b-41d4-a716-446655440001"
+                sender_id: "770e8400-e29b-41d4-a716-446655440002"
+                content: "¿Qué onda?"
+                message_type: "text"
+                detected_language: "es"
+                created_at: "2025-10-22T12:34:56Z"
+      responses:
+        '200':
+          description: Webhook received and processing started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/webhook/message-edited:
+    post:
+      tags:
+        - webhooks
+      summary: Handle message edit
+      description: Webhook triggered when message updated. Invalidates translations and re-triggers translation pipeline.
+      operationId: handleMessageEdited
+      security:
+        - WebhookAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [UPDATE]
+                table:
+                  type: string
+                  enum: [messages]
+                old_record:
+                  $ref: '#/components/schemas/Message'
+                record:
+                  $ref: '#/components/schemas/Message'
+      responses:
+        '200':
+          description: Webhook received and processing started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/transcribe-voice:
+    post:
+      tags:
+        - ai
+      summary: Transcribe voice message
+      description: Initiates voice transcription using OpenAI Whisper. Async operation.
+      operationId: transcribeVoice
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message_id
+                - voice_url
+              properties:
+                message_id:
+                  type: string
+                  format: uuid
+                  description: UUID of message to transcribe
+                voice_url:
+                  type: string
+                  description: Supabase Storage path to audio file
+              example:
+                message_id: "550e8400-e29b-41d4-a716-446655440000"
+                voice_url: "770e8400-e29b-41d4-a716-446655440002/1698012345678.m4a"
+      responses:
+        '202':
+          description: Transcription job accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Transcription started"
+                  job_id:
+                    type: string
+                    example: "transcribe-123456"
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/explain-slang:
+    post:
+      tags:
+        - ai
+      summary: Explain slang terms in message
+      description: Uses OpenAI to detect and explain slang/colloquialisms
+      operationId: explainSlang
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message_id
+              properties:
+                message_id:
+                  type: string
+                  format: uuid
+                  description: UUID of message to analyze
+              example:
+                message_id: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Slang explanation generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  has_slang:
+                    type: boolean
+                  terms:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        term:
+                          type: string
+                        explanation:
+                          type: string
+                        context:
+                          type: string
+                example:
+                  has_slang: true
+                  terms:
+                    - term: "no cap"
+                      explanation: "no lie, for real"
+                      context: "Gen Z slang, primarily US"
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/adjust-formality:
+    post:
+      tags:
+        - ai
+      summary: Adjust message formality
+      description: Generates casual, neutral, and formal versions of message
+      operationId: adjustFormality
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  description: Original message text
+                  minLength: 1
+                  maxLength: 2000
+              example:
+                text: "Hey, can u send that?"
+      responses:
+        '200':
+          description: Formality variations generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  casual:
+                    type: string
+                  neutral:
+                    type: string
+                  formal:
+                    type: string
+                example:
+                  casual: "Hey! Can you send that over?"
+                  neutral: "Hello, could you please send that?"
+                  formal: "Good afternoon, would you kindly send that document?"
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/cron/cultural-hints:
+    get:
+      tags:
+        - cron
+      summary: Generate daily cultural hints
+      description: Scheduled job (midnight UTC) that checks upcoming holidays for all users
+      operationId: generateCulturalHints
+      security:
+        - CronAuth: []
+      responses:
+        '200':
+          description: Cultural hints generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  hints_generated:
+                    type: integer
+                  users_processed:
+                    type: integer
+                example:
+                  success: true
+                  hints_generated: 15
+                  users_processed: 50
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase JWT token from auth.session().access_token
+
+    WebhookAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Bearer token with webhook secret
+
+    CronAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Vercel Cron secret token
+
+  schemas:
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversation_id:
+          type: string
+          format: uuid
+        sender_id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        message_type:
+          type: string
+          enum: [text, voice]
+        voice_url:
+          type: string
+          nullable: true
+        voice_duration_seconds:
+          type: integer
+          nullable: true
+        detected_language:
+          type: string
+          pattern: '^[a-z]{2}$'
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        edited_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_edited:
+          type: boolean
+      required:
+        - id
+        - conversation_id
+        - sender_id
+        - content
+        - message_type
+        - created_at
+        - is_edited
+
+    WebhookPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [INSERT, UPDATE, DELETE]
+        table:
+          type: string
+        record:
+          $ref: '#/components/schemas/Message'
+        old_record:
+          $ref: '#/components/schemas/Message'
+      required:
+        - type
+        - table
+        - record
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Operation completed successfully"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        details:
+          type: object
+          description: Additional error details
+      required:
+        - error
+
+  responses:
+    BadRequestError:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Invalid request"
+            code: "BAD_REQUEST"
+            details:
+              field: "message_id"
+              issue: "Must be a valid UUID"
+
+    UnauthorizedError:
+      description: Authentication failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Unauthorized"
+            code: "UNAUTHORIZED"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Internal server error"
+            code: "INTERNAL_ERROR"
+            details:
+              message: "OpenAI API request failed"
+
+  examples:
+    TextMessageWebhook:
+      value:
+        type: INSERT
+        table: messages
+        record:
+          id: "550e8400-e29b-41d4-a716-446655440000"
+          conversation_id: "660e8400-e29b-41d4-a716-446655440001"
+          sender_id: "770e8400-e29b-41d4-a716-446655440002"
+          content: "Hello, how are you?"
+          message_type: "text"
+          detected_language: "en"
+          voice_url: null
+          voice_duration_seconds: null
+          created_at: "2025-10-22T12:34:56Z"
+          edited_at: null
+          is_edited: false
+
+    VoiceMessageWebhook:
+      value:
+        type: INSERT
+        table: messages
+        record:
+          id: "550e8400-e29b-41d4-a716-446655440000"
+          conversation_id: "660e8400-e29b-41d4-a716-446655440001"
+          sender_id: "770e8400-e29b-41d4-a716-446655440002"
+          content: "[Voice message]"
+          message_type: "voice"
+          detected_language: null
+          voice_url: "770e8400-e29b-41d4-a716-446655440002/1698012345678.m4a"
+          voice_duration_seconds: 45
+          created_at: "2025-10-22T12:34:56Z"
+          edited_at: null
+          is_edited: false
+
+externalDocs:
+  description: Full Architecture Documentation
+  url: https://github.com/your-repo/docs

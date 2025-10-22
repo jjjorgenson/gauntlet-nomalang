@@ -1,0 +1,90 @@
+%%{init: {'theme':'base'}}%%
+
+graph TD
+    Start([User Opens App]) --> Auth{Authenticated?}
+    
+    Auth -->|No| Login[Login Screen]
+    Login --> EnterCreds[Enter Email/Password]
+    EnterCreds --> SubmitLogin[Submit Login]
+    SubmitLogin --> AuthSuccess{Success?}
+    AuthSuccess -->|No| ShowError[Show Error]
+    ShowError --> EnterCreds
+    AuthSuccess -->|Yes| ConvList
+
+    Auth -->|Yes| ConvList[Conversation List Screen]
+    
+    %% Send Text Message Flow
+    ConvList --> SelectConv[Select Conversation]
+    SelectConv --> ChatScreen[Chat Screen]
+    ChatScreen --> TypeMsg[Type Message]
+    TypeMsg --> TypingInd[Typing Indicator Sent]
+    TypingInd --> SendMsg{Send?}
+    SendMsg -->|Yes| DetectLang[Client: Detect Language]
+    DetectLang --> OptimisticUI[Show Message Immediately]
+    OptimisticUI --> InsertDB[Insert to Supabase]
+    InsertDB --> RealtimeBcast[Realtime Broadcast]
+    RealtimeBcast --> RecipientReceive[Recipients Receive Message]
+    RecipientReceive --> WebhookTrigger[Backend: Webhook Triggered]
+    WebhookTrigger --> CheckRecipLang[Check Recipient Languages]
+    CheckRecipLang --> NeedTranslate{Translation<br/>Needed?}
+    NeedTranslate -->|Yes| CallOpenAI[OpenAI: Translate]
+    CallOpenAI --> CacheTranslation[Save Translation]
+    CacheTranslation --> PushNotif[Send Push Notification]
+    NeedTranslate -->|No| PushNotif
+    PushNotif --> FlowEnd1([End])
+
+    %% Voice Message Flow
+    SendMsg -->|Record Voice| PressHold[Press & Hold Mic Button]
+    PressHold --> Recording[Recording Audio]
+    Recording --> Release[Release Button]
+    Release --> UploadAudio[Upload to Storage]
+    UploadAudio --> InsertVoiceMsg[Insert Voice Message]
+    InsertVoiceMsg --> TranscribeWebhook[Backend: Transcribe]
+    TranscribeWebhook --> CallWhisper[OpenAI Whisper: Transcribe]
+    CallWhisper --> UpdateTranscript[Update Message w/ Transcription]
+    UpdateTranscript --> TranslateTranscript[Translate Transcription]
+    TranslateTranscript --> FlowEnd2([End])
+
+    %% Edit Message Flow
+    ChatScreen --> LongPress[Long Press Message]
+    LongPress --> CheckEditable{Can Edit?<br/>&lt;5min, No Translation}
+    CheckEditable -->|Yes| ShowEditOption[Show Edit Option]
+    CheckEditable -->|No| NoEdit[No Edit Option]
+    NoEdit --> FlowEnd3([End])
+    ShowEditOption --> TapEdit[Tap Edit]
+    TapEdit --> EditMode[Edit Mode]
+    EditMode --> ModifyText[Modify Text]
+    ModifyText --> SubmitEdit[Submit Edit]
+    SubmitEdit --> UpdateDB[Update Message in DB]
+    UpdateDB --> DeleteTranslations[Backend: Delete Translations]
+    DeleteTranslations --> RetranslateMessage[Re-trigger Translation]
+    RetranslateMessage --> NotifyRecipients[Notify Recipients]
+    NotifyRecipients --> FlowEnd4([End])
+
+    %% Slang Explanation Flow
+    ChatScreen --> TapSlangBtn[Tap 'What does this mean?']
+    TapSlangBtn --> CheckCache{Annotation<br/>Cached?}
+    CheckCache -->|Yes| ShowExplanation[Show Explanation Modal]
+    CheckCache -->|No| CallSlangAPI[Call Backend API]
+    CallSlangAPI --> OpenAISlang[OpenAI: Analyze Slang]
+    OpenAISlang --> SaveAnnotation[Save Annotation]
+    SaveAnnotation --> ShowExplanation
+    ShowExplanation --> FlowEnd5([End])
+
+    %% Formality Adjustment Flow
+    ChatScreen --> TapWand[Tap Magic Wand Icon]
+    TapWand --> CallFormalityAPI[Call Backend API]
+    CallFormalityAPI --> OpenAIFormality[OpenAI: Generate 3 Versions]
+    OpenAIFormality --> ShowModal[Show Formality Picker Modal]
+    ShowModal --> SelectVersion[User Selects Version]
+    SelectVersion --> ReplaceText[Replace Compose Text]
+    ReplaceText --> FlowEnd6([End])
+
+    classDef startEnd fill:#4caf50,stroke:#2e7d32,color:#fff
+    classDef decision fill:#ff9800,stroke:#f57c00,color:#fff
+    classDef process fill:#2196f3,stroke:#1976d2,color:#fff
+    classDef backend fill:#9c27b0,stroke:#7b1fa2,color:#fff
+
+    class Start,FlowEnd1,FlowEnd2,FlowEnd3,FlowEnd4,FlowEnd5,FlowEnd6 startEnd
+    class Auth,AuthSuccess,SendMsg,NeedTranslate,CheckEditable,CheckCache decision
+    class Login,EnterCreds,ConvList,ChatScreen,TypeMsg,DetectLang,InsertDB backend
