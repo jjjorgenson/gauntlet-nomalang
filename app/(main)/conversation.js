@@ -18,7 +18,8 @@ export default function ConversationScreen() {
     sendMessage,
     markAsRead,
     typingUsers,
-    isConnected
+    isConnected,
+    conversation
   } = useChat(conversationId)
 
   useEffect(() => {
@@ -52,8 +53,8 @@ export default function ConversationScreen() {
 
   const renderMessage = ({ item }) => {
     const isOwnMessage = item.sender_id === user?.id
-    const messageStatus = item.message_status?.[0]
-    
+    const messageStatus = item.message_status?.find(status => status.user_id === user?.id)
+
     return (
       <View style={[
         styles.messageContainer,
@@ -70,8 +71,8 @@ export default function ConversationScreen() {
             </Text>
             {isOwnMessage && messageStatus && (
               <Text variant="labelSmall" style={styles.status}>
-                {messageStatus.read ? 'Read' : 
-                 messageStatus.delivered ? 'Delivered' : 'Sent'}
+                {messageStatus.status === 'read' ? 'Read' :
+                 messageStatus.status === 'delivered' ? 'Delivered' : 'Sent'}
               </Text>
             )}
           </Card.Content>
@@ -101,10 +102,18 @@ export default function ConversationScreen() {
     )
   }
 
+  if (!conversation) {
+    return (
+      <View style={styles.container}>
+        <Text>Conversation not found or access denied</Text>
+      </View>
+    )
+  }
+
   return (
     <Surface style={styles.container}>
       <View style={styles.header}>
-        <Text variant="titleMedium">Conversation</Text>
+        <Text variant="titleMedium">{conversation.name || 'Conversation'}</Text>
         <Text variant="bodySmall">
           {isConnected ? 'Connected' : 'Disconnected'}
         </Text>

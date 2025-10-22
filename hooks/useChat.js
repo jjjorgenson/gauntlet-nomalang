@@ -9,10 +9,33 @@ export function useChat(conversationId) {
   const [loading, setLoading] = useState(true)
   const [isConnected, setIsConnected] = useState(false)
   const [typingUsers, setTypingUsers] = useState([])
-  
+  const [conversation, setConversation] = useState(null)
+
   const channelRef = useRef(null)
   const retryTimeoutRef = useRef(null)
   const typingTimeoutRef = useRef(null)
+
+  // Load conversation data
+  const loadConversation = useCallback(async () => {
+    if (!conversationId || !user) return
+
+    try {
+      const { data, error } = await supabase
+        .from('conversations')
+        .select('id, name, type, created_at')
+        .eq('id', conversationId)
+        .single()
+
+      if (error) {
+        console.error('Error loading conversation:', error)
+        return
+      }
+
+      setConversation(data)
+    } catch (error) {
+      console.error('Error loading conversation:', error)
+    }
+  }, [conversationId, user])
 
   // Load messages from Supabase
   const loadMessages = useCallback(async () => {
@@ -20,7 +43,7 @@ export function useChat(conversationId) {
 
     try {
       setLoading(true)
-      
+
       const { data, error } = await supabase
         .from('messages')
         .select(`
@@ -28,12 +51,12 @@ export function useChat(conversationId) {
           content,
           sender_id,
           created_at,
-          message_status (
+          message_status!inner (
             id,
-            delivered,
-            read,
+            status,
             delivered_at,
-            read_at
+            read_at,
+            user_id
           )
         `)
         .eq('conversation_id', conversationId)
@@ -81,9 +104,10 @@ export function useChat(conversationId) {
         throw error
       }
 
+      // Message status is automatically created by the trigger
       // Remove from pending messages
       await removePendingMessage(messageId)
-      
+
       // Update local state
       setMessages(prev => [...prev, data])
       
@@ -93,7 +117,7 @@ export function useChat(conversationId) {
     }
   }, [conversationId, user])
 
-  // Mark messages as read
+  // Mark messages as read using the RPC function
   const markAsRead = useCallback(async () => {
     if (!conversationId || !user) return
 
@@ -104,22 +128,14 @@ export function useChat(conversationId) {
         .select('id')
         .eq('conversation_id', conversationId)
         .neq('sender_id', user.id)
-        .not('message_status', 'cs', `[{"recipient_id":"${user.id}","read":true}]`)
 
       if (unreadMessages && unreadMessages.length > 0) {
-        // Update message status
-        const statusUpdates = unreadMessages.map(msg => ({
-          message_id: msg.id,
-          recipient_id: user.id,
-          read: true,
-          read_at: new Date().toISOString()
-        }))
-
-        await supabase
-          .from('message_status')
-          .upsert(statusUpdates, { 
-            onConflict: 'message_id,recipient_id' 
+        // Mark each message as read using the RPC function
+        for (const message of unreadMessages) {
+          await supabase.rpc('mark_message_read', {
+            p_message_id: message.id
           })
+        }
       }
     } catch (error) {
       console.error('Error marking messages as read:', error)
@@ -156,9 +172,31 @@ export function useChat(conversationId) {
         // Update message status in local state
         setMessages(prev => prev.map(msg => {
           if (msg.id === payload.new.message_id) {
+            // Update the specific status record for this user
+            const updatedStatus = msg.message_status?.map(status =>
+              status.user_id === payload.new.user_id ? payload.new : status
+            ) || [payload.new]
+
             return {
               ...msg,
-              message_status: [payload.new]
+              message_status: updatedStatus
+            }
+          }
+          return msg
+        }))
+      })
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'message_status'
+      }, (payload) => {
+        console.log('New message status created:', payload.new)
+        // Add new message status to local state
+        setMessages(prev => prev.map(msg => {
+          if (msg.id === payload.new.message_id) {
+            return {
+              ...msg,
+              message_status: [...(msg.message_status || []), payload.new]
             }
           }
           return msg
@@ -242,6 +280,7 @@ export function useChat(conversationId) {
   // Initialize chat
   useEffect(() => {
     if (conversationId && user) {
+      loadConversation()
       loadMessages()
       setupRealtimeSubscription()
     }
@@ -257,7 +296,7 @@ export function useChat(conversationId) {
         clearTimeout(typingTimeoutRef.current)
       }
     }
-  }, [conversationId, user, loadMessages, setupRealtimeSubscription])
+  }, [conversationId, user, loadConversation, loadMessages, setupRealtimeSubscription])
 
   return {
     messages,
@@ -265,6 +304,7 @@ export function useChat(conversationId) {
     sendMessage,
     markAsRead,
     typingUsers,
-    isConnected
+    isConnected,
+    conversation
   }
 }

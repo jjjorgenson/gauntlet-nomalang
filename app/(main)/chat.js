@@ -19,18 +19,16 @@ export default function ChatScreen() {
   const loadConversations = async () => {
     try {
       setLoading(true)
-      
-      // Get conversations where user is a participant
+
+      // Get conversations where user is the creator (RLS handles this)
       const { data, error } = await supabase
         .from('conversations')
         .select(`
           id,
           name,
           type,
-          created_at,
-          participants!inner(user_id)
+          created_at
         `)
-        .eq('participants.user_id', user.id)
         .order('created_at', { ascending: false })
 
       if (error) {
