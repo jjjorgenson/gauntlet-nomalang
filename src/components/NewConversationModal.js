@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, Text } from 'react-native';
+import { View, StyleSheet, FlatList, Text, Alert } from 'react-native';
 import { 
   Modal, 
   Portal, 
@@ -22,6 +22,7 @@ export default function NewConversationModal({ visible, onDismiss, onConversatio
   const [loading, setLoading] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [creating, setCreating] = useState(false);
+  const [groupName, setGroupName] = useState('');
 
   useEffect(() => {
     if (visible) {
@@ -30,6 +31,7 @@ export default function NewConversationModal({ visible, onDismiss, onConversatio
       // Reset state when modal closes
       setSearchQuery('');
       setSelectedUsers([]);
+      setGroupName('');
     }
   }, [visible]);
 
@@ -81,61 +83,73 @@ export default function NewConversationModal({ visible, onDismiss, onConversatio
     try {
       setCreating(true);
       
-      console.log('🔍 Starting conversation creation...');
-      console.log('📊 Selected users:', selectedUsers.map(u => ({ id: u.id, username: u.username })));
-      console.log('👤 Current user:', { id: user.id, email: user.email });
+      // console.log('🔍 Starting conversation creation...');
+      // console.log('📊 Selected users:', selectedUsers.map(u => ({ id: u.id, username: u.username })));
+      // console.log('👤 Current user:', { id: user.id, email: user.email });
+      
+      const isGroup = selectedUsers.length > 1;
+      
+      // Validate group name for group chats
+      if (isGroup && !groupName.trim()) {
+        Alert.alert('Group Name Required', 'Please enter a name for the group chat.');
+        return;
+      }
       
       // For direct conversations, check if one already exists
-      if (selectedUsers.length === 1) {
-        console.log('🔍 Checking for existing direct conversation...');
+      if (!isGroup) {
+        // console.log('🔍 Checking for existing direct conversation...');
         const { data: existingConversation, error: checkError } = await DatabaseService.findExistingDirectConversation(
           user.id, 
           selectedUsers[0].id
         );
         
         if (checkError) {
-          console.error('❌ Error checking for existing conversation:', checkError);
+          console.error('Error checking for existing conversation:', checkError);
           Alert.alert('Error', 'Failed to check for existing conversation.');
           return;
         }
         
         if (existingConversation) {
-          console.log('✅ Found existing direct conversation:', existingConversation);
-          console.log('🎉 Opening existing conversation instead of creating new one');
+          // console.log('✅ Found existing direct conversation:', existingConversation);
+          // console.log('🎉 Opening existing conversation instead of creating new one');
           onDismiss();
           onConversationCreated(existingConversation);
           return;
         }
         
-        console.log('📝 No existing conversation found, creating new one...');
+        // console.log('📝 No existing conversation found, creating new one...');
       }
       
       // Create conversation
-      console.log('📝 Creating conversation with data:', {
-        type: selectedUsers.length === 1 ? 'direct' : 'group',
-        name: selectedUsers.length === 1 
-          ? `${selectedUsers[0].username}` 
-          : `Group Chat (${selectedUsers.length + 1})`
-      });
+      // console.log('📝 Creating conversation with data:', {
+      //   type: isGroup ? 'group' : 'direct',
+      //   name: isGroup ? groupName.trim() : null
+      // });
       
       const { data: conversation, error: convError } = await DatabaseService.createConversation({
-        type: selectedUsers.length === 1 ? 'direct' : 'group',
-        name: selectedUsers.length === 1 
-          ? null  // Direct conversations must have NULL name per database constraint
-          : `Group Chat (${selectedUsers.length + 1})`
+        type: isGroup ? 'group' : 'direct',
+        name: isGroup ? groupName.trim() : null  // Direct conversations must have NULL name per database constraint
       });
 
       if (convError) {
-        console.error('❌ Error creating conversation:', convError);
-        console.error('❌ Conversation creation failed at step 1');
+        console.error('Error creating conversation:', convError);
         return;
       }
 
-      console.log('✅ Conversation created successfully:', conversation);
+      // console.log('✅ Conversation created successfully:', conversation);
 
       // Add participants
+      // console.log('🔍 selectedUsers type:', typeof selectedUsers, Array.isArray(selectedUsers));
+      // console.log('🔍 selectedUsers content:', selectedUsers);
+      
+      if (!Array.isArray(selectedUsers)) {
+        console.error('selectedUsers is not an array:', selectedUsers);
+        Alert.alert('Error', 'Invalid user selection. Please try again.');
+        return;
+      }
+      
       const participants = [user.id, ...selectedUsers.map(u => u.id)];
-      console.log('👥 Adding participants:', participants);
+      // console.log('👥 Adding participants:', participants);
       
       const { data: participantsData, error: participantsError } = await DatabaseService.addConversationParticipants(
         conversation.id, 
@@ -143,19 +157,18 @@ export default function NewConversationModal({ visible, onDismiss, onConversatio
       );
 
       if (participantsError) {
-        console.error('❌ Error adding participants:', participantsError);
-        console.error('❌ Participant addition failed at step 2');
+        console.error('Error adding participants:', participantsError);
         return;
       }
 
-      console.log('✅ Participants added successfully:', participantsData);
+      // console.log('✅ Participants added successfully:', participantsData);
 
       // Close modal and navigate to conversation
-      console.log('🎉 Conversation creation completed successfully!');
+      // console.log('🎉 Conversation creation completed successfully!');
       onDismiss();
       onConversationCreated(conversation);
     } catch (error) {
-      console.error('💥 Unexpected error in createConversation:', error);
+      console.error('Unexpected error in createConversation:', error);
     } finally {
       setCreating(false);
     }
@@ -216,6 +229,20 @@ export default function NewConversationModal({ visible, onDismiss, onConversatio
               ))}
             </View>
 
+            {/* Show group name input if multiple users selected */}
+            {selectedUsers.length > 1 && (
+              <TextInput
+                label="Group Name"
+                value={groupName}
+                onChangeText={setGroupName}
+                style={styles.input}
+                mode="outlined"
+                placeholder="Enter group name..."
+                textColor="#1F2937"
+                activeOutlineColor="#8B5CF6"
+              />
+            )}
+
             <Divider style={styles.divider} />
 
             <FlatList
@@ -268,6 +295,10 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   searchbar: {
+    marginBottom: 16,
+    backgroundColor: '#F9FAFB',
+  },
+  input: {
     marginBottom: 16,
     backgroundColor: '#F9FAFB',
   },

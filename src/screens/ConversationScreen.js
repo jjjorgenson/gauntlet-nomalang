@@ -41,7 +41,7 @@ export default function ConversationScreen() {
 
     // Reset scroll flag for new conversation
     shouldScrollToBottom.current = true;
-    console.log('🔄 New conversation loaded, should scroll to bottom');
+    // console.log('🔄 New conversation loaded, should scroll to bottom');
     
     loadMessages();
     setupRealTimeSubscriptions();
@@ -69,13 +69,13 @@ export default function ConversationScreen() {
   // Auto-scroll when messages are loaded - more robust approach
   useEffect(() => {
     if (shouldScrollToBottom.current && messages.length > 0 && !loading) {
-      console.log(`🔄 Messages loaded (${messages.length}), attempting scroll to bottom`);
+      // console.log(`🔄 Messages loaded (${messages.length}), attempting scroll to bottom`);
       
       // Use multiple attempts with increasing delays
       const attemptScroll = (attempt = 1) => {
         if (flatListRef.current && shouldScrollToBottom.current) {
           flatListRef.current.scrollToEnd({ animated: false });
-          console.log(`✅ Scroll attempt ${attempt} completed`);
+          // console.log(`✅ Scroll attempt ${attempt} completed`);
           
           // If this is the first attempt, try again after a longer delay
           if (attempt === 1) {
@@ -94,7 +94,7 @@ export default function ConversationScreen() {
   // Force scroll to bottom function with multiple methods
   const forceScrollToBottom = () => {
     if (flatListRef.current && messages.length > 0) {
-      console.log('🔄 Force scrolling to bottom');
+      // console.log('🔄 Force scrolling to bottom');
       
       // Try scrollToEnd first
       flatListRef.current.scrollToEnd({ animated: false });
@@ -108,9 +108,9 @@ export default function ConversationScreen() {
               animated: false,
               viewPosition: 1 // 1 = bottom of viewport
             });
-            console.log('✅ Used scrollToIndex as fallback');
+            // console.log('✅ Used scrollToIndex as fallback');
           } catch (error) {
-            console.log('⚠️ scrollToIndex failed, using scrollToEnd');
+            // console.log('⚠️ scrollToIndex failed, using scrollToEnd');
             flatListRef.current.scrollToEnd({ animated: false });
           }
         }
@@ -121,17 +121,17 @@ export default function ConversationScreen() {
   // Smart scroll to bottom - only if user is near bottom
   const scrollToBottomIfNear = (animated = true) => {
     if (isNearBottom && flatListRef.current) {
-      console.log('📜 User near bottom, auto-scrolling');
+      // console.log('📜 User near bottom, auto-scrolling');
       flatListRef.current.scrollToEnd({ animated });
     } else {
-      console.log('📜 User scrolled up, not auto-scrolling');
+      // console.log('📜 User scrolled up, not auto-scrolling');
     }
   };
   
   // Force scroll regardless of position (for sending own messages)
   const scrollToBottomForce = (animated = true) => {
     if (flatListRef.current) {
-      console.log('📜 Force scrolling to bottom');
+      // console.log('📜 Force scrolling to bottom');
       flatListRef.current.scrollToEnd({ animated });
     }
   };
@@ -156,7 +156,7 @@ export default function ConversationScreen() {
   // Handle content size change for reliable auto-scroll
   const handleContentSizeChange = () => {
     if (shouldScrollToBottom.current && flatListRef.current) {
-      console.log('🔄 onContentSizeChange triggered, scrolling to bottom');
+      // console.log('🔄 onContentSizeChange triggered, scrolling to bottom');
       
       // Use multiple attempts with different delays
       const scrollAttempts = [50, 150, 300, 500];
@@ -165,7 +165,7 @@ export default function ConversationScreen() {
         setTimeout(() => {
           if (flatListRef.current && shouldScrollToBottom.current) {
             flatListRef.current.scrollToEnd({ animated: false });
-            console.log(`✅ Scroll attempt ${index + 1} (${delay}ms delay)`);
+            // console.log(`✅ Scroll attempt ${index + 1} (${delay}ms delay)`);
             
             // Only reset flag on the last attempt
             if (index === scrollAttempts.length - 1) {
@@ -216,7 +216,7 @@ export default function ConversationScreen() {
       // Final fallback scroll attempt - more aggressive
       setTimeout(() => {
         if (shouldScrollToBottom.current) {
-          console.log('🔄 Final fallback scroll attempt');
+          // console.log('🔄 Final fallback scroll attempt');
           forceScrollToBottom();
           
           // Try again after another delay
@@ -267,16 +267,28 @@ export default function ConversationScreen() {
   };
 
   const setupRealTimeSubscriptions = () => {
+    if (!conversationId || !user) return;
+    
+    // console.log('🔴 Setting up real-time subscriptions for conversation:', conversationId);
+    // console.log('🔴 Current user:', user.id);
+    // console.log('🔴 User email:', user.email);
+    
     // Subscribe to new messages
     messageSubscription.current = messagingService.current.subscribeToMessages(
       conversationId,
       (payload) => {
-        console.log('New message received:', payload);
+        // console.log('🔴 New message received via real-time:', payload);
+        // console.log('🔴 Message conversation_id:', payload.new?.conversation_id);
+        // console.log('🔴 Message sender_id:', payload.new?.sender_id);
+        // console.log('🔴 Current user_id:', user.id);
         
-        // Get the full message data with user info
-        DatabaseService.getMessages(conversationId, 1, 0).then(({ data }) => {
-          if (data && data.length > 0) {
-            const newMsg = data[0];
+      // Get the full message data with user info (fetch the newest message)
+      DatabaseService.getNewestMessage(conversationId).then(({ data: newMsg, error }) => {
+        if (newMsg && !error) {
+          // console.log('🔴 Fetched message data:', newMsg);
+          // console.log('🔴 Message sender username:', newMsg.users?.username);
+          // console.log('🔴 Message sender email:', newMsg.users?.email);
+            
             const formattedMessage = {
               id: newMsg.id,
               content: newMsg.content,
@@ -296,14 +308,21 @@ export default function ConversationScreen() {
             // (our own messages are handled via storage)
             setMessages(prev => {
               const exists = prev.some(msg => msg.id === formattedMessage.id);
+              // console.log('🔴 Message exists in state?', exists);
+              
               if (exists) {
+                // console.log('🔴 Message already exists, skipping');
                 return prev;
               }
               
-              // Don't add our own messages via real-time (they're already added via storage)
+              // IMPORTANT: For group chats, we need to show messages from ALL users
+              // Only skip if it's our own message (already added via storage)
               if (formattedMessage.senderId === user.id) {
+                // console.log('🔴 Message is from current user, skipping (already in storage)');
                 return prev;
               }
+              
+              // console.log('🔴 Adding new message to state');
               
               return [...prev, formattedMessage];
             });
@@ -317,7 +336,11 @@ export default function ConversationScreen() {
             if (newMsg.sender_id !== user.id) {
               messagingService.current.markAsDelivered(newMsg.id, user.id);
             }
+          } else {
+            // console.log('🔴 No message data returned from database');
           }
+        }).catch(error => {
+          console.error('Error fetching message data:', error);
         });
       }
     );
@@ -326,6 +349,7 @@ export default function ConversationScreen() {
     typingSubscription.current = messagingService.current.subscribeToTyping(
       conversationId,
       (typingUsers) => {
+        // console.log('🔴 Typing users update:', typingUsers);
         setTypingUsers(typingUsers.filter(u => u !== user.id));
       }
     );

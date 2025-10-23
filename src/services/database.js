@@ -210,6 +210,18 @@ export class DatabaseService {
 
   // Check if a direct conversation already exists between two users
   static async findExistingDirectConversation(userId1, userId2) {
+    // Step 1: Get all conversation IDs for userId2
+    const { data: user2Convs, error: user2Error } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id')
+      .eq('user_id', userId2);
+    
+    if (user2Error) return { data: null, error: user2Error };
+    if (!user2Convs || user2Convs.length === 0) return { data: null, error: null };
+    
+    const user2ConvIds = user2Convs.map(c => c.conversation_id);
+    
+    // Step 2: Find conversations where userId1 is also a participant
     const { data, error } = await supabase
       .from('conversation_participants')
       .select(`
@@ -217,35 +229,29 @@ export class DatabaseService {
         conversations (
           id,
           type,
+          name,
           created_at
         )
       `)
       .eq('user_id', userId1)
-      .in('conversation_id', 
-        supabase
-          .from('conversation_participants')
-          .select('conversation_id')
-          .eq('user_id', userId2)
-      );
+      .in('conversation_id', user2ConvIds);
     
     if (error) return { data: null, error };
+    if (!data || data.length === 0) return { data: null, error: null };
     
-    // Find direct conversations between these two users
-    const directConversations = data.filter(item => 
-      item.conversations.type === 'direct'
-    );
-    
-    // Check if this is a 2-person conversation (both users)
-    for (const conv of directConversations) {
+    // Step 3: Filter for direct conversations and verify it's exactly 2 participants
+    for (const item of data) {
+      if (item.conversations?.type !== 'direct') continue;
+      
       const { data: participants } = await supabase
         .from('conversation_participants')
         .select('user_id')
-        .eq('conversation_id', conv.conversation_id);
+        .eq('conversation_id', item.conversation_id);
       
       if (participants && participants.length === 2) {
         const participantIds = participants.map(p => p.user_id);
         if (participantIds.includes(userId1) && participantIds.includes(userId2)) {
-          return { data: conv.conversations, error: null };
+          return { data: item.conversations, error: null };
         }
       }
     }
@@ -280,6 +286,25 @@ export class DatabaseService {
       .range(offset, offset + limit - 1);
     
     return { data, error };
+  }
+
+  // Get the newest message in a conversation (for real-time updates)
+  static async getNewestMessage(conversationId) {
+    const { data, error } = await supabase
+      .from('messages')
+      .select(`
+        *,
+        users!messages_sender_id_fkey (
+          id,
+          username,
+          avatar_url
+        )
+      `)
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: false })  // Newest first
+      .limit(1);
+    
+    return { data: data?.[0] || null, error };
   }
 
   static async updateMessageStatus(messageId, userId, status) {
