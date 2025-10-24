@@ -55,8 +55,12 @@ class TranslationService {
    * @returns {Promise<Object>} - Translation result with text, confidence, etc.
    */
   async translateText(text, targetLanguage, sourceLanguage) {
-    // Check cache first
-    const cacheKey = `${text}_${sourceLanguage}_${targetLanguage}`;
+    // Convert to 2-char codes for API
+    const targetLang = LanguageService.toISO6391(targetLanguage);
+    const sourceLang = LanguageService.toISO6391(sourceLanguage);
+    
+    // Check cache with converted codes
+    const cacheKey = `${text}_${sourceLang}_${targetLang}`;
     if (this.cache.has(cacheKey)) {
       console.log('Translation cache hit:', cacheKey);
       return this.cache.get(cacheKey);
@@ -65,9 +69,9 @@ class TranslationService {
     let result;
 
     if (this.mockMode) {
-      result = this.getMockTranslation(text, targetLanguage, sourceLanguage);
+      result = this.getMockTranslation(text, targetLang, sourceLang);
     } else {
-      result = await this.callRealTranslationAPI(text, targetLanguage, sourceLanguage);
+      result = await this.callRealTranslationAPI(text, targetLang, sourceLang);
     }
 
     // Cache the result

@@ -31,6 +31,13 @@ class Config {
       retryAttempts: 3,
       retryDelay: 1000 // 1 second
     };
+
+    // Debug logging
+    console.log('🔧 Config initialized:');
+    console.log('  EXPO_PUBLIC_MOCK_TRANSLATION:', process.env.EXPO_PUBLIC_MOCK_TRANSLATION);
+    console.log('  MOCK_TRANSLATION:', process.env.MOCK_TRANSLATION);
+    console.log('  Backend URL:', this.backendUrl);
+    console.log('  Mock Mode:', this.features.mockTranslation);
   }
   
   /**

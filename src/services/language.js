@@ -2,6 +2,41 @@ import { franc, francAll } from 'franc';
 
 // Language detection service
 export class LanguageService {
+  // ISO 639-2 (3-char) to ISO 639-1 (2-char) mapping
+  static languageCodeMap = {
+    'eng': 'en',
+    'spa': 'es',
+    'fra': 'fr',
+    'deu': 'de',
+    'ita': 'it',
+    'por': 'pt',
+    'rus': 'ru',
+    'jpn': 'ja',
+    'kor': 'ko',
+    'cmn': 'zh',
+    'zho': 'zh',
+    'ara': 'ar',
+    'hin': 'hi',
+    'pol': 'pl',
+    'ces': 'cs',
+    'swe': 'sv',
+    'dan': 'da',
+    'nor': 'no',
+    'fin': 'fi',
+    'nld': 'nl',
+    'tur': 'tr',
+    // Add more as needed
+  };
+
+  /**
+   * Convert ISO 639-2 (3-char) code to ISO 639-1 (2-char) code
+   * @param {string} iso6392Code - 3-character language code
+   * @returns {string} - 2-character language code
+   */
+  static toISO6391(iso6392Code) {
+    return this.languageCodeMap[iso6392Code] || iso6392Code.slice(0, 2);
+  }
+
   // Character and keyword-based language detection for short text
   static detectLanguageByCharactersAndKeywords(text) {
     if (!text) return null;
