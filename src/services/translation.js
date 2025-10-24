@@ -1,9 +1,11 @@
 import LanguageService from './language';
+import Config from '../lib/config';
 
 class TranslationService {
   constructor() {
-    this.mockMode = process.env.MOCK_TRANSLATION === 'true' || process.env.EXPO_PUBLIC_MOCK_TRANSLATION === 'true';
+    this.mockMode = Config.isMockMode();
     this.cache = new Map(); // In-memory cache for translations
+    this.config = Config;
   }
 
   /**
@@ -107,15 +109,61 @@ class TranslationService {
   }
 
   /**
-   * Call real translation API (to be implemented in Phase 3)
+   * Call real translation API
    * @param {string} text - Text to translate
    * @param {string} targetLanguage - Target language
    * @param {string} sourceLanguage - Source language
    * @returns {Promise<Object>} - Real translation result
    */
   async callRealTranslationAPI(text, targetLanguage, sourceLanguage) {
-    // TODO: Implement in Phase 3
-    throw new Error('Real translation API not implemented yet. Use mock mode for development.');
+    const apiUrl = this.config.getEndpoint('translate');
+    
+    if (!apiUrl) {
+      throw new Error('Translation API endpoint not configured');
+    }
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text,
+          targetLanguage,
+          sourceLanguage
+        }),
+        timeout: this.config.getApiConfig().timeout
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Translation API error: ${response.status} - ${errorData.message || response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      // Validate response format
+      if (!result.translatedText) {
+        throw new Error('Invalid translation API response format');
+      }
+
+      return {
+        translatedText: result.translatedText,
+        sourceLanguage: result.sourceLanguage || sourceLanguage,
+        targetLanguage: result.targetLanguage || targetLanguage,
+        confidence: result.confidence || 0.95,
+        isMock: false,
+        timestamp: result.timestamp || new Date().toISOString()
+      };
+
+    } catch (error) {
+      console.error('Translation API error:', error);
+      
+      // Fallback to mock translation if API fails
+      console.warn('Falling back to mock translation due to API error');
+      return this.getMockTranslation(text, targetLanguage, sourceLanguage);
+    }
   }
 
   /**

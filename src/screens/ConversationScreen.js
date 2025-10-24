@@ -9,6 +9,8 @@ import StorageService from '../lib/storage';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
 import TranslatedMessage from '../components/TranslatedMessage';
+import VoiceMessage from '../components/VoiceMessage';
+import VoiceRecorder from '../components/VoiceRecorder';
 
 export default function ConversationScreen() {
   const route = useRoute();
@@ -28,6 +30,10 @@ export default function ConversationScreen() {
   // Translation settings (will be loaded from user profile later)
   const [userLanguage, setUserLanguage] = useState('en');
   const [autoTranslateEnabled, setAutoTranslateEnabled] = useState(false);
+  
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceUploading, setVoiceUploading] = useState(false);
   const scrollPositionRef = useRef(0);
   const contentHeightRef = useRef(0);
   
@@ -467,6 +473,99 @@ export default function ConversationScreen() {
       messagingService.current.setTypingStatus(conversationId, user.id, false);
     }
   };
+
+  // Handle voice recording completion
+  const handleVoiceRecordingComplete = async (voiceData) => {
+    try {
+      setVoiceUploading(true);
+      console.log('🎤 Voice recording completed:', voiceData);
+
+      // Create temporary voice message for immediate display
+      const tempId = `voice_temp_${Date.now()}`;
+      const tempMessage = {
+        id: tempId,
+        content: '', // Empty transcription initially
+        sender_id: user.id,
+        created_at: new Date().toISOString(),
+        message_type: 'voice',
+        voice_url: voiceData.voiceUrl,
+        voice_duration_seconds: voiceData.duration,
+        detected_language: 'en',
+        is_edited: false,
+        edited_at: null,
+        users: {
+          username: user.email?.split('@')[0] || 'You'
+        }
+      };
+
+      // Add to local storage and UI immediately
+      await StorageService.addMessage(conversationId, tempMessage);
+      const formattedTemp = formatMessages([tempMessage])[0];
+      setMessages(prev => [...prev, formattedTemp]);
+
+      // Scroll to bottom after adding voice message
+      setTimeout(() => {
+        scrollToBottomForce(true);
+      }, 100);
+
+      // Check network status
+      if (!isOnline) {
+        console.log('📤 Offline: Adding voice message to queue');
+        await addToQueue({
+          ...tempMessage,
+          conversation_id: conversationId
+        });
+        setVoiceUploading(false);
+        return;
+      }
+
+      // Send voice message to server
+      const { data, error } = await messagingService.current.sendVoiceMessageWithUpload(
+        voiceData.audioUri || voiceData.voiceUrl, // Use original URI if available
+        conversationId,
+        user.id
+      );
+
+      if (error) {
+        console.error('Error sending voice message:', error);
+        // Queue for offline sync
+        await addToQueue({
+          ...tempMessage,
+          conversation_id: conversationId
+        });
+        setVoiceUploading(false);
+        return;
+      }
+
+      // Replace temp message with real message
+      if (data) {
+        await StorageService.removeMessage(conversationId, tempId);
+        await StorageService.addMessage(conversationId, data);
+        
+        const realMessage = formatMessages([data])[0];
+        setMessages(prev => prev.map(msg => 
+          msg.id === tempId ? realMessage : msg
+        ));
+        console.log('✅ Voice message sent and cached successfully');
+      }
+
+    } catch (error) {
+      console.error('Error handling voice recording:', error);
+      // Queue for offline sync
+      await addToQueue({
+        ...tempMessage,
+        conversation_id: conversationId
+      });
+    } finally {
+      setVoiceUploading(false);
+    }
+  };
+
+  // Handle voice recording cancellation
+  const handleVoiceRecordingCancel = () => {
+    console.log('🎤 Voice recording cancelled');
+    setIsRecording(false);
+  };
   
   const loadMoreMessages = async () => {
     if (loadingMore) return;
@@ -506,37 +605,57 @@ export default function ConversationScreen() {
   };
 
   const renderMessage = ({ item }) => {
-    // For own messages, show simple message without translation
+    // Handle voice messages
+    if (item.messageType === 'voice') {
+      return (
+        <View style={[
+          styles.messageContainer,
+          item.isOwn ? styles.ownMessage : styles.otherMessage
+        ]}>
+          <VoiceMessage
+            message={item}
+            userLanguage={userLanguage}
+            autoTranslateEnabled={autoTranslateEnabled}
+            onTranslationComplete={(translation) => {
+              console.log('Voice message translation completed:', translation);
+              // TODO: Save translation to database in Phase 3
+            }}
+          />
+        </View>
+      );
+    }
+
+    // For own text messages, show simple message without translation
     if (item.isOwn) {
       return (
-    <View style={[
-      styles.messageContainer,
+        <View style={[
+          styles.messageContainer,
           styles.ownMessage
-    ]}>
+        ]}>
           <View style={[
-        styles.messageCard,
+            styles.messageCard,
             styles.ownMessageCard
           ]}>
             <Text style={[
               styles.messageContent,
               styles.ownMessageText
             ]}>
-            {item.content}
-          </Text>
+              {item.content}
+            </Text>
             {item.isEdited && (
               <Text style={styles.editedLabel}>
                 (edited)
+              </Text>
+            )}
+            <Text style={styles.timestamp}>
+              {item.timestamp.toLocaleTimeString()}
             </Text>
-          )}
-          <Text style={styles.timestamp}>
-            {item.timestamp.toLocaleTimeString()}
-          </Text>
           </View>
         </View>
       );
     }
 
-    // For other messages, use TranslatedMessage component
+    // For other text messages, use TranslatedMessage component
     return (
       <View style={[
         styles.messageContainer,
@@ -670,13 +789,12 @@ export default function ConversationScreen() {
         </TouchableOpacity>
       </View>
 
-      <FAB
-        style={styles.voiceFab}
-        icon="microphone"
-        onPress={() => {
-          // TODO: Start voice recording
-          console.log('Start voice recording');
-        }}
+      {/* Voice Recording UI */}
+      <VoiceRecorder
+        conversationId={conversationId}
+        onRecordingComplete={handleVoiceRecordingComplete}
+        onRecordingCancel={handleVoiceRecordingCancel}
+        disabled={sending || voiceUploading}
       />
     </View>
   );

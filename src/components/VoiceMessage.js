@@ -1,0 +1,545 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { Text, Card, IconButton, ActivityIndicator } from 'react-native-paper';
+import { Audio } from 'expo-av';
+import { useAuth } from '../contexts/AuthContext';
+
+export default function VoiceMessage({ 
+  message, 
+  userLanguage, 
+  autoTranslateEnabled, 
+  onTranslationComplete 
+}) {
+  const { user } = useAuth();
+  const [sound, setSound] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playbackError, setPlaybackError] = useState(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcription, setTranscription] = useState(null);
+  const [translation, setTranslation] = useState(null);
+  const [showTranslation, setShowTranslation] = useState(false);
+  
+  const positionInterval = useRef(null);
+  const waveAnimation = useRef(new Animated.Value(0)).current;
+
+  // Extract voice message data
+  const voiceUrl = message.voiceUrl;
+  const voiceDuration = message.voiceDuration || 0;
+  const isOwn = message.isOwn;
+
+  useEffect(() => {
+    // Set initial duration from message data
+    if (voiceDuration > 0) {
+      setDuration(voiceDuration);
+    }
+
+    // Check if transcription is available
+    if (message.content && message.content.trim()) {
+      setTranscription(message.content);
+    }
+
+    // Check if this is a new voice message that needs transcription
+    if (voiceUrl && !transcription && !isTranscribing) {
+      // This would trigger backend transcription in a real implementation
+      // For now, we'll simulate the transcription process
+      simulateTranscription();
+    }
+
+    return () => {
+      // Cleanup on unmount
+      if (sound) {
+        sound.unloadAsync();
+      }
+      if (positionInterval.current) {
+        clearInterval(positionInterval.current);
+      }
+    };
+  }, [voiceUrl, voiceDuration]);
+
+  // Simulate transcription process (replace with real API call)
+  const simulateTranscription = async () => {
+    setIsTranscribing(true);
+    
+    // Simulate API delay
+    setTimeout(() => {
+      setTranscription("This is a simulated transcription of the voice message.");
+      setIsTranscribing(false);
+    }, 2000);
+  };
+
+  // Load and play audio
+  const loadAndPlayAudio = async () => {
+    if (!voiceUrl) {
+      setPlaybackError('Audio file not available');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setPlaybackError(null);
+
+      // Unload previous sound if exists
+      if (sound) {
+        await sound.unloadAsync();
+      }
+
+      // Create new sound object
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: voiceUrl },
+        { shouldPlay: true },
+        onPlaybackStatusUpdate
+      );
+
+      setSound(newSound);
+      setIsPlaying(true);
+      startWaveAnimation();
+
+    } catch (error) {
+      console.error('Error loading audio:', error);
+      setPlaybackError('Failed to load audio. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle playback status updates
+  const onPlaybackStatusUpdate = (status) => {
+    if (status.isLoaded) {
+      setPosition(status.positionMillis / 1000); // Convert to seconds
+      setDuration(status.durationMillis / 1000);
+      
+      if (status.didJustFinish) {
+        setIsPlaying(false);
+        setPosition(0);
+        stopWaveAnimation();
+      }
+    }
+  };
+
+  // Toggle play/pause
+  const togglePlayback = async () => {
+    if (!sound) {
+      await loadAndPlayAudio();
+      return;
+    }
+
+    try {
+      if (isPlaying) {
+        await sound.pauseAsync();
+        setIsPlaying(false);
+        stopWaveAnimation();
+      } else {
+        await sound.playAsync();
+        setIsPlaying(true);
+        startWaveAnimation();
+      }
+    } catch (error) {
+      console.error('Error toggling playback:', error);
+      setPlaybackError('Playback error. Please try again.');
+    }
+  };
+
+  // Seek to position
+  const seekTo = async (positionSeconds) => {
+    if (!sound) return;
+
+    try {
+      await sound.setPositionAsync(positionSeconds * 1000);
+      setPosition(positionSeconds);
+    } catch (error) {
+      console.error('Error seeking:', error);
+    }
+  };
+
+  // Start wave animation
+  const startWaveAnimation = () => {
+    Animated.loop(
+      Animated.timing(waveAnimation, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      })
+    ).start();
+  };
+
+  // Stop wave animation
+  const stopWaveAnimation = () => {
+    waveAnimation.stopAnimation();
+    waveAnimation.setValue(0);
+  };
+
+  // Format time as MM:SS
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Calculate progress percentage
+  const progressPercentage = duration > 0 ? (position / duration) * 100 : 0;
+
+  // Handle translation (similar to TranslatedMessage)
+  const handleTranslate = async () => {
+    if (!transcription) return;
+    
+    // This would call the translation API
+    // For now, simulate translation
+    setTranslation({
+      translatedText: "Esta es una transcripción simulada del mensaje de voz.",
+      targetLanguage: userLanguage,
+      sourceLanguage: "en",
+      confidence: 0.95,
+      isMock: true
+    });
+    setShowTranslation(true);
+  };
+
+  // Render voice message content
+  const renderVoiceContent = () => (
+    <Card style={[
+      styles.voiceCard,
+      isOwn ? styles.ownVoiceCard : styles.otherVoiceCard
+    ]}>
+      <Card.Content style={styles.voiceContent}>
+        {/* Voice controls */}
+        <View style={styles.voiceControls}>
+          <TouchableOpacity
+            style={styles.playButton}
+            onPress={togglePlayback}
+            disabled={isLoading || !!playbackError}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#8B5CF6" />
+            ) : (
+              <Text style={styles.playButtonText}>
+                {isPlaying ? '⏸️' : '▶️'}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.voiceInfo}>
+            <Text style={[
+              styles.voiceLabel,
+              isOwn ? styles.ownVoiceLabel : styles.otherVoiceLabel
+            ]}>
+              🎤 Voice Message
+            </Text>
+            <Text style={[
+              styles.durationLabel,
+              isOwn ? styles.ownDurationLabel : styles.otherDurationLabel
+            ]}>
+              {formatTime(duration)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Progress bar */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <View 
+              style={[
+                styles.progressFill,
+                { width: `${progressPercentage}%` }
+              ]} 
+            />
+          </View>
+          <Text style={[
+            styles.timeText,
+            isOwn ? styles.ownTimeText : styles.otherTimeText
+          ]}>
+            {formatTime(position)} / {formatTime(duration)}
+          </Text>
+        </View>
+
+        {/* Wave visualization */}
+        <View style={styles.waveContainer}>
+          {[...Array(8)].map((_, i) => (
+            <Animated.View
+              key={i}
+              style={[
+                styles.waveBar,
+                {
+                  height: isPlaying ? waveAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [8, 24],
+                  }) : 8,
+                  opacity: isPlaying ? waveAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.3, 1],
+                  }) : 0.3,
+                }
+              ]}
+            />
+          ))}
+        </View>
+
+        {/* Error state */}
+        {playbackError && (
+          <Text style={styles.errorText}>{playbackError}</Text>
+        )}
+      </Card.Content>
+    </Card>
+  );
+
+  // Render transcription
+  const renderTranscription = () => {
+    if (!transcription && !isTranscribing) return null;
+
+    return (
+      <View style={styles.transcriptionContainer}>
+        <Card style={styles.transcriptionCard}>
+          <Card.Content>
+            {isTranscribing ? (
+              <View style={styles.transcribingContainer}>
+                <ActivityIndicator size="small" color="#8B5CF6" />
+                <Text style={styles.transcribingText}>Transcribing...</Text>
+              </View>
+            ) : (
+              <View>
+                <Text style={styles.transcriptionText}>{transcription}</Text>
+                {!isOwn && (
+                  <Button
+                    mode="text"
+                    onPress={handleTranslate}
+                    style={styles.translateButton}
+                    labelStyle={styles.translateButtonText}
+                  >
+                    Translate
+                  </Button>
+                )}
+              </View>
+            )}
+          </Card.Content>
+        </Card>
+      </View>
+    );
+  };
+
+  // Render translation
+  const renderTranslation = () => {
+    if (!translation || !showTranslation) return null;
+
+    return (
+      <View style={styles.translationContainer}>
+        <Card style={styles.translationCard}>
+          <Card.Content>
+            <View style={styles.translationHeader}>
+              <Text style={styles.translationLabel}>
+                🔄 Translation
+              </Text>
+              {translation.isMock && (
+                <Text style={styles.mockIndicator}>MOCK</Text>
+              )}
+            </View>
+            <Text style={styles.translatedText}>
+              {translation.translatedText}
+            </Text>
+            <View style={styles.translationControls}>
+              <Button
+                mode="text"
+                onPress={() => setShowTranslation(!showTranslation)}
+                style={styles.toggleButton}
+                labelStyle={styles.toggleButtonText}
+              >
+                {showTranslation ? 'Hide Translation' : 'Show Translation'}
+              </Button>
+            </View>
+          </Card.Content>
+        </Card>
+      </View>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      {renderVoiceContent()}
+      {renderTranscription()}
+      {renderTranslation()}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    marginVertical: 4,
+  },
+  voiceCard: {
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  ownVoiceCard: {
+    backgroundColor: '#8B5CF6',
+  },
+  otherVoiceCard: {
+    backgroundColor: '#F3F4F6',
+  },
+  voiceContent: {
+    padding: 16,
+  },
+  voiceControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  playButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  playButtonText: {
+    fontSize: 18,
+    color: '#FFFFFF',
+  },
+  voiceInfo: {
+    flex: 1,
+  },
+  voiceLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  ownVoiceLabel: {
+    color: '#FFFFFF',
+  },
+  otherVoiceLabel: {
+    color: '#1F2937',
+  },
+  durationLabel: {
+    fontSize: 12,
+    opacity: 0.8,
+  },
+  ownDurationLabel: {
+    color: '#FFFFFF',
+  },
+  otherDurationLabel: {
+    color: '#6B7280',
+  },
+  progressContainer: {
+    marginBottom: 12,
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 2,
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 2,
+  },
+  timeText: {
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  ownTimeText: {
+    color: '#FFFFFF',
+    opacity: 0.8,
+  },
+  otherTimeText: {
+    color: '#6B7280',
+  },
+  waveContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 32,
+  },
+  waveBar: {
+    width: 3,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 1,
+    borderRadius: 1.5,
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#EF4444',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  transcriptionContainer: {
+    marginLeft: 16,
+    marginTop: 4,
+  },
+  transcriptionCard: {
+    backgroundColor: '#F9FAFB',
+    borderLeftWidth: 3,
+    borderLeftColor: '#8B5CF6',
+    borderRadius: 8,
+  },
+  transcribingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  transcribingText: {
+    marginLeft: 8,
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
+  transcriptionText: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 20,
+  },
+  translateButton: {
+    paddingHorizontal: 0,
+    marginTop: 8,
+  },
+  translateButtonText: {
+    color: '#8B5CF6',
+    fontSize: 12,
+  },
+  translationContainer: {
+    marginLeft: 16,
+    marginTop: 4,
+  },
+  translationCard: {
+    backgroundColor: '#F9FAFB',
+    borderLeftWidth: 3,
+    borderLeftColor: '#8B5CF6',
+    borderRadius: 8,
+  },
+  translationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  translationLabel: {
+    fontSize: 12,
+    color: '#8B5CF6',
+    fontWeight: '600',
+  },
+  mockIndicator: {
+    fontSize: 10,
+    color: '#F59E0B',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 2,
+  },
+  translatedText: {
+    fontSize: 13,
+    color: '#374151',
+    fontStyle: 'italic',
+    lineHeight: 18,
+  },
+  translationControls: {
+    marginTop: 8,
+  },
+  toggleButton: {
+    paddingHorizontal: 0,
+  },
+  toggleButtonText: {
+    color: '#8B5CF6',
+    fontSize: 12,
+  },
+});

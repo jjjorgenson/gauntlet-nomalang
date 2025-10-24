@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import DatabaseService from './database';
+import VoiceService from './voice';
 
 // Sanitize text to remove null bytes and problematic characters
 const sanitizeText = (text) => {
@@ -53,7 +54,7 @@ export class MessagingService {
       const messageData = {
         conversation_id: conversationId,
         sender_id: senderId,
-        content: transcription,
+        content: transcription || '', // Allow empty transcription initially
         message_type: 'voice',
         voice_url: voiceUrl,
         voice_duration_seconds: duration,
@@ -70,6 +71,107 @@ export class MessagingService {
       return { data, error: null };
     } catch (error) {
       console.error('Error sending voice message:', error);
+      return { data: null, error };
+    }
+  }
+
+  // Send voice message with automatic upload and retry
+  async sendVoiceMessageWithUpload(audioUri, conversationId, senderId, onProgress = null) {
+    try {
+      console.log('🎤 Starting voice message upload process');
+      
+      // Upload audio file with retry logic
+      const uploadResult = await VoiceService.uploadWithRetry(
+        audioUri, 
+        senderId, 
+        conversationId, 
+        onProgress
+      );
+
+      if (!uploadResult.success) {
+        return { 
+          data: null, 
+          error: uploadResult.error,
+          needsUserAction: VoiceService.shouldShowUserOptions(uploadResult.error)
+        };
+      }
+
+      // Send message to database
+      const messageResult = await this.sendVoiceMessage(
+        conversationId,
+        uploadResult.voiceUrl,
+        uploadResult.duration || 0,
+        '', // Empty transcription initially
+        senderId
+      );
+
+      if (messageResult.error) {
+        // If message creation fails, try to clean up uploaded file
+        try {
+          await VoiceService.deleteAudioFile(uploadResult.fileName);
+        } catch (cleanupError) {
+          console.error('Error cleaning up uploaded file:', cleanupError);
+        }
+        
+        return messageResult;
+      }
+
+      console.log('✅ Voice message sent successfully');
+      return { 
+        data: messageResult.data, 
+        error: null,
+        voiceUrl: uploadResult.voiceUrl,
+        fileName: uploadResult.fileName
+      };
+
+    } catch (error) {
+      console.error('Error in voice message upload process:', error);
+      return { data: null, error: 'Failed to send voice message' };
+    }
+  }
+
+  // Update voice message transcription
+  async updateVoiceTranscription(messageId, transcription, language = null) {
+    try {
+      const updateData = {
+        content: transcription,
+        ...(language && { detected_language: language })
+      };
+
+      const { data, error } = await DatabaseService.updateMessage(messageId, updateData);
+      
+      if (error) throw error;
+
+      return { data, error: null };
+    } catch (error) {
+      console.error('Error updating voice transcription:', error);
+      return { data: null, error };
+    }
+  }
+
+  // Get voice message details
+  async getVoiceMessageDetails(messageId) {
+    try {
+      const { data, error } = await DatabaseService.getMessage(messageId);
+      
+      if (error) throw error;
+
+      // If it's a voice message, get additional details
+      if (data && data.message_type === 'voice') {
+        const voiceDetails = {
+          ...data,
+          hasAudio: !!data.voice_url,
+          duration: data.voice_duration_seconds,
+          hasTranscription: !!(data.content && data.content.trim()),
+          transcription: data.content
+        };
+
+        return { data: voiceDetails, error: null };
+      }
+
+      return { data, error: null };
+    } catch (error) {
+      console.error('Error getting voice message details:', error);
       return { data: null, error };
     }
   }

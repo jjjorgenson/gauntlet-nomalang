@@ -1,0 +1,20 @@
+{
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/cultural-hints",
+      "schedule": "0 0 * * *"
+    }
+  ],
+  "env": {
+    "SUPABASE_URL": "@supabase-url",
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase-service-key",
+    "OPENAI_API_KEY": "@openai-api-key",
+    "WEBHOOK_SECRET": "@webhook-secret",
+    "CRON_SECRET": "@cron-secret"
+  }
+}
