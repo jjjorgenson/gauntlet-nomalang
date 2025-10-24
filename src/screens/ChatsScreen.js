@@ -93,7 +93,7 @@ export default function ChatsScreen() {
     } catch (error) {
       console.error('Error loading conversations:', error);
     } finally {
-      setLoading(false);
+    setLoading(false);
     }
   };
   
@@ -362,9 +362,9 @@ export default function ChatsScreen() {
           <Paragraph style={styles.lastMessage} numberOfLines={1}>
             {item.lastMessage || 'No messages yet'}
           </Paragraph>
-          <Text style={styles.timestamp}>
-            {item.lastMessageTime || 'Just now'}
-          </Text>
+        <Text style={styles.timestamp}>
+          {item.lastMessageTime || 'Just now'}
+        </Text>
         </View>
         {item.unreadCount > 0 && (
           <Badge style={styles.unreadBadge}>{item.unreadCount}</Badge>

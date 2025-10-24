@@ -1,17 +1,155 @@
-import franc from 'franc';
+import { franc, francAll } from 'franc';
 
 // Language detection service
 export class LanguageService {
+  // Character and keyword-based language detection for short text
+  static detectLanguageByCharactersAndKeywords(text) {
+    if (!text) return null;
+    
+    const lowerText = text.toLowerCase().trim();
+    
+    // ============ KEYWORD-BASED DETECTION ============
+    
+    // Spanish keywords
+    const spanishKeywords = ['hola', 'gracias', 'por favor', 'buenos dias', 'buenas tardes', 
+                            'buenas noches', 'adios', 'hasta luego', 'si', 'no', 
+                            'como estas', 'que tal', 'de nada', 'perdon', 'disculpa'];
+    if (spanishKeywords.some(word => lowerText.includes(word))) {
+      return 'spa';
+    }
+    
+    // French keywords
+    const frenchKeywords = ['bonjour', 'merci', 'salut', 'bonsoir', 'bonne nuit',
+                           'au revoir', 'oui', 'non', 'comment allez-vous', 
+                           's\'il vous plait', 'pardon', 'excusez-moi', 'de rien'];
+    if (frenchKeywords.some(word => lowerText.includes(word))) {
+      return 'fra';
+    }
+    
+    // German keywords
+    const germanKeywords = ['hallo', 'danke', 'bitte', 'guten tag', 'guten morgen',
+                           'guten abend', 'gute nacht', 'auf wiedersehen', 'tschuss',
+                           'ja', 'nein', 'wie geht', 'entschuldigung', 'bitte schon'];
+    if (germanKeywords.some(word => lowerText.includes(word))) {
+      return 'deu';
+    }
+    
+    // Portuguese keywords
+    const portugueseKeywords = ['ola', 'obrigado', 'obrigada', 'por favor', 'bom dia',
+                               'boa tarde', 'boa noite', 'adeus', 'tchau', 'sim', 'nao',
+                               'como vai', 'com licenca', 'desculpe', 'de nada'];
+    if (portugueseKeywords.some(word => lowerText.includes(word))) {
+      return 'por';
+    }
+    
+    // Italian keywords
+    const italianKeywords = ['ciao', 'grazie', 'prego', 'buongiorno', 'buonasera',
+                            'buonanotte', 'arrivederci', 'si', 'come sta', 'scusa',
+                            'per favore', 'salve'];
+    if (italianKeywords.some(word => lowerText.includes(word))) {
+      return 'ita';
+    }
+    
+    // ============ CHARACTER-BASED DETECTION ============
+    
+    // French indicators
+    if (/[àâçèéêëîïôùûüÿœæ]/i.test(text)) {
+      return 'fra';
+    }
+    
+    // German indicators
+    if (/[äöüß]/i.test(text)) {
+      return 'deu';
+    }
+    
+    // Spanish indicators
+    if (/[áéíóúñ¿¡]/i.test(text) || text.includes('¿') || text.includes('¡')) {
+      return 'spa';
+    }
+    
+    // Portuguese indicators (similar to Spanish but distinct)
+    if (/[ãõâêôàç]/i.test(text)) {
+      return 'por';
+    }
+    
+    // Italian indicators
+    if (/[àèéìíîòóùú]/i.test(text)) {
+      return 'ita';
+    }
+    
+    // Polish indicators
+    if (/[ąćęłńóśźż]/i.test(text)) {
+      return 'pol';
+    }
+    
+    // Czech indicators
+    if (/[áčďéěíňóřšťúůýž]/i.test(text)) {
+      return 'ces';
+    }
+    
+    // Nordic indicators (Swedish, Norwegian, Danish)
+    if (/[åæø]/i.test(text)) {
+      return 'swe'; // Default to Swedish, could be Norwegian or Danish
+    }
+    
+    return null;
+  }
+
   // Detect language using franc library (client-side)
   static detectLanguage(text) {
     try {
+      // Minimum text length for reliable detection
+      if (!text || text.length < 3) {
+        return {
+          language: 'en',
+          confidence: 0,
+          isReliable: false
+        };
+      }
+      
+      // Strategy 1: Character and keyword-based detection for short text
+      const characterBasedLanguage = this.detectLanguageByCharactersAndKeywords(text);
+      
+      // Strategy 2: Use franc for detection
       const detected = franc(text);
-      const confidence = franc.all(text)[0]?.score || 0;
+      const allResults = francAll(text);
+      const confidence = allResults[0]?.[1] || 0;
+      
+      // Strategy 3: Decide which result to use
+      let finalLanguage = detected;
+      let finalConfidence = confidence;
+      let strategy = 'franc';
+      
+      // If text is short (< 20 chars) and we have character hints, prefer those
+      if (text.length < 20 && characterBasedLanguage) {
+        // If franc detected 'und' (undetermined) or low confidence, use character-based
+        if (detected === 'und' || confidence < 0.5) {
+          finalLanguage = characterBasedLanguage;
+          finalConfidence = 0.85; // High confidence for character-based
+          strategy = 'character-based';
+        } else if (characterBasedLanguage !== detected) {
+          // Character hints disagree with franc - use character hints if franc confidence is low
+          if (confidence < 0.8) {
+            finalLanguage = characterBasedLanguage;
+            finalConfidence = 0.75;
+            strategy = 'character-based (override)';
+          }
+        }
+      }
+      
+      // If franc detected Esperanto but we have character hints, prefer those
+      if (detected === 'epo' && characterBasedLanguage) {
+        finalLanguage = characterBasedLanguage;
+        finalConfidence = 0.80;
+        strategy = 'character-based (override esperanto)';
+      }
+      
+      console.log(`🔍 Language detection: "${text}" → ${finalLanguage} (${strategy}, confidence: ${finalConfidence})`);
       
       return {
-        language: detected,
-        confidence: confidence,
-        isReliable: confidence > 0.8
+        language: finalLanguage,
+        confidence: finalConfidence,
+        isReliable: finalConfidence > 0.7 && finalLanguage !== 'und'
       };
     } catch (error) {
       console.error('Error detecting language:', error);
@@ -26,6 +164,7 @@ export class LanguageService {
   // Get language name from code
   static getLanguageName(code) {
     const languages = {
+      // ISO 639-1 (2-letter codes)
       'en': 'English',
       'es': 'Spanish',
       'fr': 'French',
@@ -63,7 +202,65 @@ export class LanguageService {
       'sq': 'Albanian',
       'sr': 'Serbian',
       'bs': 'Bosnian',
-      'me': 'Montenegrin'
+      'me': 'Montenegrin',
+      
+      // ISO 639-3 (3-letter codes) - franc output
+      'eng': 'English',
+      'spa': 'Spanish',
+      'fra': 'French',
+      'deu': 'German',
+      'ita': 'Italian',
+      'por': 'Portuguese',
+      'rus': 'Russian',
+      'jpn': 'Japanese',
+      'kor': 'Korean',
+      'cmn': 'Chinese (Mandarin)',
+      'zho': 'Chinese',
+      'ara': 'Arabic',
+      'hin': 'Hindi',
+      'tha': 'Thai',
+      'vie': 'Vietnamese',
+      'tur': 'Turkish',
+      'pol': 'Polish',
+      'nld': 'Dutch',
+      'swe': 'Swedish',
+      'dan': 'Danish',
+      'nor': 'Norwegian',
+      'fin': 'Finnish',
+      'ces': 'Czech',
+      'hun': 'Hungarian',
+      'ron': 'Romanian',
+      'bul': 'Bulgarian',
+      'hrv': 'Croatian',
+      'slk': 'Slovak',
+      'slv': 'Slovenian',
+      'est': 'Estonian',
+      'lav': 'Latvian',
+      'lit': 'Lithuanian',
+      'ukr': 'Ukrainian',
+      'bel': 'Belarusian',
+      'mkd': 'Macedonian',
+      'sqi': 'Albanian',
+      'srp': 'Serbian',
+      'bos': 'Bosnian',
+      'glg': 'Galician',
+      'cat': 'Catalan',
+      'eus': 'Basque',
+      'isl': 'Icelandic',
+      'gle': 'Irish',
+      'gla': 'Scottish Gaelic',
+      'cym': 'Welsh',
+      'heb': 'Hebrew',
+      'yid': 'Yiddish',
+      'ind': 'Indonesian',
+      'msa': 'Malay',
+      'tgl': 'Tagalog',
+      'swa': 'Swahili',
+      'afr': 'Afrikaans',
+      'nob': 'Norwegian Bokmål',
+      'nno': 'Norwegian Nynorsk',
+      'epo': 'Esperanto',
+      'und': 'Unknown'
     };
 
     return languages[code] || code;

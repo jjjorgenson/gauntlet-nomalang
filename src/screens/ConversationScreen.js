@@ -8,6 +8,7 @@ import DatabaseService from '../services/database';
 import StorageService from '../lib/storage';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
+import TranslatedMessage from '../components/TranslatedMessage';
 
 export default function ConversationScreen() {
   const route = useRoute();
@@ -23,6 +24,10 @@ export default function ConversationScreen() {
   const [offset, setOffset] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  
+  // Translation settings (will be loaded from user profile later)
+  const [userLanguage, setUserLanguage] = useState('en');
+  const [autoTranslateEnabled, setAutoTranslateEnabled] = useState(false);
   const scrollPositionRef = useRef(0);
   const contentHeightRef = useRef(0);
   
@@ -211,7 +216,7 @@ export default function ConversationScreen() {
     } catch (error) {
       console.error('Error loading messages:', error);
     } finally {
-      setLoading(false);
+    setLoading(false);
       
       // Final fallback scroll attempt - more aggressive
       setTimeout(() => {
@@ -357,8 +362,16 @@ export default function ConversationScreen() {
 
   const sendMessage = async () => {
     if (!newMessage.trim() || sending) return;
+    
+    // Sanitize message content
+    const sanitizedContent = newMessage.trim().replace(/\u0000/g, '');
+    
+    if (!sanitizedContent) {
+      console.error('❌ Message is empty after sanitization');
+      return;
+    }
 
-    const messageContent = newMessage.trim();
+    const messageContent = sanitizedContent;
     const tempId = `temp_${Date.now()}`;
     
     // Create temporary message for immediate display
@@ -492,40 +505,55 @@ export default function ConversationScreen() {
     }
   };
 
-  const renderMessage = ({ item }) => (
+  const renderMessage = ({ item }) => {
+    // For own messages, show simple message without translation
+    if (item.isOwn) {
+      return (
     <View style={[
       styles.messageContainer,
-      item.isOwn ? styles.ownMessage : styles.otherMessage
+          styles.ownMessage
     ]}>
-      <View style={[
+          <View style={[
         styles.messageCard,
-        item.isOwn ? styles.ownMessageCard : styles.otherMessageCard
+            styles.ownMessageCard
+          ]}>
+            <Text style={[
+              styles.messageContent,
+              styles.ownMessageText
+            ]}>
+            {item.content}
+          </Text>
+            {item.isEdited && (
+              <Text style={styles.editedLabel}>
+                (edited)
+            </Text>
+          )}
+          <Text style={styles.timestamp}>
+            {item.timestamp.toLocaleTimeString()}
+          </Text>
+          </View>
+        </View>
+      );
+    }
+
+    // For other messages, use TranslatedMessage component
+    return (
+      <View style={[
+        styles.messageContainer,
+        styles.otherMessage
       ]}>
-        {!item.isOwn && (
-          <Text style={styles.senderName}>
-            {item.senderName}
-          </Text>
-        )}
-        <Text style={[
-          styles.messageContent,
-          item.isOwn ? styles.ownMessageText : styles.otherMessageText
-        ]}>
-          {item.content}
-        </Text>
-        {item.isEdited && (
-          <Text style={styles.editedLabel}>
-            (edited)
-          </Text>
-        )}
-        <Text style={[
-          styles.timestamp,
-          !item.isOwn && styles.otherTimestamp
-        ]}>
-          {item.timestamp.toLocaleTimeString()}
-        </Text>
+        <TranslatedMessage
+          message={item}
+          userLanguage={userLanguage}
+          autoTranslateEnabled={autoTranslateEnabled}
+          onTranslationComplete={(translation) => {
+            console.log('Translation completed:', translation);
+            // TODO: Save translation to database in Phase 3
+          }}
+        />
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderTypingIndicator = () => {
     if (typingUsers.length === 0) return null;
@@ -572,8 +600,8 @@ export default function ConversationScreen() {
     return (
       <View style={styles.loadingMoreContainer}>
         <Text style={styles.loadingMoreText}>Loading older messages...</Text>
-      </View>
-    );
+    </View>
+  );
   };
 
   if (loading) {
@@ -588,6 +616,24 @@ export default function ConversationScreen() {
     <View style={styles.container}>
       {renderOfflineBanner()}
       {renderQueueIndicator()}
+      
+      {/* Temporary translation toggle for testing */}
+      <View style={styles.translationToggle}>
+        <TouchableOpacity 
+          style={[
+            styles.toggleButton,
+            autoTranslateEnabled && styles.toggleButtonActive
+          ]}
+          onPress={() => setAutoTranslateEnabled(!autoTranslateEnabled)}
+        >
+          <Text style={[
+            styles.toggleButtonText,
+            autoTranslateEnabled && styles.toggleButtonTextActive
+          ]}>
+            {autoTranslateEnabled ? '🔄 Auto-translate ON' : '⏸️ Auto-translate OFF'}
+          </Text>
+        </TouchableOpacity>
+      </View>
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -793,5 +839,33 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 12,
     fontStyle: 'italic',
+  },
+  translationToggle: {
+    padding: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  toggleButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignSelf: 'flex-start',
+  },
+  toggleButtonActive: {
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
+  },
+  toggleButtonText: {
+    color: '#6B7280',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  toggleButtonTextActive: {
+    color: '#FFFFFF',
   },
 });

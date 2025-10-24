@@ -117,7 +117,14 @@ class StorageService {
   static async addToOfflineQueue(message) {
     try {
       const queue = await this.getOfflineQueue();
-      const updatedQueue = [...queue, message];
+      
+      // Sanitize message content
+      const sanitizedMessage = {
+        ...message,
+        content: message.content ? message.content.replace(/\u0000/g, '').trim() : message.content
+      };
+      
+      const updatedQueue = [...queue, sanitizedMessage];
       await AsyncStorage.setItem(this.OFFLINE_QUEUE_KEY, JSON.stringify(updatedQueue));
       console.log(`📤 Added message to offline queue. Queue size: ${updatedQueue.length}`);
     } catch (error) {

@@ -1,6 +1,13 @@
 import { supabase } from '../lib/supabase';
 import DatabaseService from './database';
 
+// Sanitize text to remove null bytes and problematic characters
+const sanitizeText = (text) => {
+  if (!text) return text;
+  // Remove null bytes and other problematic characters
+  return text.replace(/\u0000/g, '').trim();
+};
+
 // Real-time messaging service
 export class MessagingService {
   constructor() {
@@ -11,10 +18,17 @@ export class MessagingService {
   // Send a text message
   async sendMessage(conversationId, content, senderId) {
     try {
+      // Sanitize content before sending
+      const sanitizedContent = sanitizeText(content);
+      
+      if (!sanitizedContent) {
+        throw new Error('Message content is empty after sanitization');
+      }
+
       const messageData = {
         conversation_id: conversationId,
         sender_id: senderId,
-        content: content,
+        content: sanitizedContent,
         message_type: 'text',
         detected_language: 'en' // TODO: Implement language detection
       };
