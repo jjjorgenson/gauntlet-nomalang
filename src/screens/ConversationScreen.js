@@ -672,9 +672,17 @@ export default function ConversationScreen() {
                 (edited)
               </Text>
             )}
-            <Text style={styles.timestamp}>
-              {item.timestamp.toLocaleTimeString()}
-            </Text>
+            <View style={styles.messageFooter}>
+              <Text style={styles.timestamp}>
+                {item.timestamp.toLocaleTimeString()}
+              </Text>
+              {/* Read receipt indicators */}
+              <View style={styles.readReceipts}>
+                <Text style={styles.readReceiptText}>
+                  {item.readCount > 0 ? '✓✓' : '✓'}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
       );
@@ -899,6 +907,20 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     marginTop: 4,
     alignSelf: 'flex-end',
+  },
+  messageFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  readReceipts: {
+    marginLeft: 8,
+  },
+  readReceiptText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    opacity: 0.8,
   },
   otherTimestamp: {
     color: '#6B7280',
