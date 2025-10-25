@@ -202,16 +202,34 @@ export default function VoiceMessage({
   const handleTranslate = async () => {
     if (!transcription) return;
     
-    // This would call the translation API
-    // For now, simulate translation
-    setTranslation({
-      translatedText: "Esta es una transcripción simulada del mensaje de voz.",
-      targetLanguage: userLanguage,
-      sourceLanguage: "en",
-      confidence: 0.95,
-      isMock: true
-    });
-    setShowTranslation(true);
+    try {
+      // Import translation service dynamically
+      const TranslationService = (await import('../services/translation')).default;
+      
+      // Detect source language from transcription
+      const LanguageService = (await import('../services/language')).default;
+      const detection = LanguageService.detectLanguage(transcription);
+      const sourceLanguage = detection.language || 'en';
+      
+      // Translate transcription to user's language
+      const result = await TranslationService.translateText(
+        transcription,
+        sourceLanguage,
+        userLanguage
+      );
+      
+      setTranslation({
+        translatedText: result.translatedText,
+        targetLanguage: userLanguage,
+        sourceLanguage: sourceLanguage,
+        confidence: result.confidence,
+        isMock: result.isMock || false
+      });
+      setShowTranslation(true);
+    } catch (error) {
+      console.error('❌ Translation error:', error);
+      // Optionally show error to user
+    }
   };
 
   // Render voice message content
