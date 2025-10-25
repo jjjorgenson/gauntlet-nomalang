@@ -129,19 +129,35 @@ async function downloadAudioFromSupabase(audioUrl) {
     
     console.log(`🔍 Downloading from bucket: ${bucket}, file: ${filePath}`)
     
-    // Download file using Supabase client
-    const { data, error } = await supabase.storage
-      .from(bucket)
-      .download(filePath)
+    // Try direct fetch first (for public URLs)
+    try {
+      console.log(`🌐 Attempting direct fetch from: ${audioUrl}`)
+      const response = await fetch(audioUrl)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+      
+      const arrayBuffer = await response.arrayBuffer()
+      console.log(`✅ Direct fetch successful, got ${arrayBuffer.byteLength} bytes`)
+      return Buffer.from(arrayBuffer)
+    } catch (fetchError) {
+      console.log(`⚠️ Direct fetch failed: ${fetchError.message}, trying Supabase client...`)
+      
+      // Fallback to Supabase client
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .download(filePath)
 
-    if (error) {
-      console.error('Supabase storage download error:', error)
-      return null
+      if (error) {
+        console.error('Supabase storage download error:', error)
+        return null
+      }
+
+      // Convert blob to buffer
+      const arrayBuffer = await data.arrayBuffer()
+      return Buffer.from(arrayBuffer)
     }
-
-    // Convert blob to buffer
-    const arrayBuffer = await data.arrayBuffer()
-    return Buffer.from(arrayBuffer)
 
   } catch (error) {
     console.error('Failed to download audio from Supabase:', error)
