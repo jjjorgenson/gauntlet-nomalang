@@ -130,6 +130,38 @@ export class LanguageService {
     return null;
   }
 
+  // Check if text is clearly English based on common patterns
+  static isClearlyEnglish(text) {
+    if (!text) return false;
+    
+    const lowerText = text.toLowerCase();
+    
+    // Common English words and patterns
+    const englishPatterns = [
+      'testing', 'voice', 'memo', 'message', 'hello', 'hi', 'how', 'are', 'you',
+      'the', 'and', 'or', 'but', 'this', 'that', 'with', 'from', 'they', 'have',
+      'been', 'will', 'would', 'could', 'should', 'can', 'may', 'might',
+      'second', 'first', 'third', 'one', 'two', 'three', 'four', 'five'
+    ];
+    
+    // Check for English words
+    const englishWordCount = englishPatterns.filter(word => 
+      lowerText.includes(word)
+    ).length;
+    
+    // If we find 2+ English words, it's likely English
+    if (englishWordCount >= 2) return true;
+    
+    // Check for English sentence patterns
+    const englishSentencePatterns = [
+      /^[a-z\s]+$/i,  // Only letters and spaces
+      /\b(testing|voice|memo|message)\b/i,  // Common English words
+      /\b(the|and|or|but|this|that)\b/i     // Common English articles/conjunctions
+    ];
+    
+    return englishSentencePatterns.some(pattern => pattern.test(text));
+  }
+
   // Detect language using franc library (client-side)
   static detectLanguage(text) {
     try {
@@ -177,6 +209,13 @@ export class LanguageService {
         finalLanguage = characterBasedLanguage;
         finalConfidence = 0.80;
         strategy = 'character-based (override esperanto)';
+      }
+      
+      // Override franc if it detects non-English for clearly English text
+      if (detected !== 'eng' && detected !== 'und' && this.isClearlyEnglish(text)) {
+        finalLanguage = 'eng';
+        finalConfidence = 0.90;
+        strategy = 'english-override';
       }
       
       console.log(`🔍 Language detection: "${text}" → ${finalLanguage} (${strategy}, confidence: ${finalConfidence})`);

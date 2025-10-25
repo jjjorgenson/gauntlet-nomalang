@@ -211,6 +211,12 @@ export default function VoiceMessage({
       const detection = LanguageService.detectLanguage(transcription);
       const sourceLanguage = detection.language || 'en';
       
+      // Don't translate if source and target are the same
+      if (sourceLanguage === userLanguage) {
+        console.log('🚫 Skipping translation: same language', sourceLanguage, '->', userLanguage);
+        return;
+      }
+      
       // Translate transcription to user's language
       const result = await TranslationService.translateText(
         transcription,
@@ -337,7 +343,7 @@ export default function VoiceMessage({
             ) : (
               <View>
                 <Text style={styles.transcriptionText}>{transcription}</Text>
-                {!isOwn && (
+                {!isOwn && userLanguage !== 'en' && (
                   <Button
                     mode="text"
                     onPress={handleTranslate}
