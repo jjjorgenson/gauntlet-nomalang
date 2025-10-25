@@ -43,9 +43,8 @@ export default function VoiceMessage({
 
     // Check if this is a new voice message that needs transcription
     if (voiceUrl && !transcription && !isTranscribing) {
-      // This would trigger backend transcription in a real implementation
-      // For now, we'll simulate the transcription process
-      simulateTranscription();
+      // Trigger real transcription process
+      performTranscription();
     }
 
     return () => {
@@ -59,15 +58,33 @@ export default function VoiceMessage({
     };
   }, [voiceUrl, voiceDuration]);
 
-  // Simulate transcription process (replace with real API call)
-  const simulateTranscription = async () => {
+  // Real transcription process using VoiceService
+  const performTranscription = async () => {
+    if (!voiceUrl) return;
+    
     setIsTranscribing(true);
     
-    // Simulate API delay
-    setTimeout(() => {
-      setTranscription("This is a simulated transcription of the voice message.");
+    try {
+      console.log('🎯 Starting transcription for voice message:', voiceUrl);
+      
+      // Import VoiceService dynamically to avoid circular imports
+      const VoiceService = (await import('../services/voice')).default;
+      
+      const result = await VoiceService.transcribeAudio(voiceUrl, userLanguage);
+      
+      if (result.success) {
+        console.log('✅ Transcription completed:', result.transcription);
+        setTranscription(result.transcription);
+      } else {
+        console.warn('⚠️ Transcription failed');
+        setTranscription(null);
+      }
+    } catch (error) {
+      console.error('❌ Transcription error:', error);
+      setTranscription(null);
+    } finally {
       setIsTranscribing(false);
-    }, 2000);
+    }
   };
 
   // Load and play audio
@@ -224,13 +241,13 @@ export default function VoiceMessage({
             <Text style={[
               styles.voiceLabel,
               isOwn ? styles.ownVoiceLabel : styles.otherVoiceLabel
-            ]}>
+            ]} numberOfLines={1}>
               🎤 Voice Message
             </Text>
             <Text style={[
               styles.durationLabel,
               isOwn ? styles.ownDurationLabel : styles.otherDurationLabel
-            ]}>
+            ]} numberOfLines={1}>
               {formatTime(duration)}
             </Text>
           </View>
@@ -254,18 +271,20 @@ export default function VoiceMessage({
           </Text>
         </View>
 
-        {/* Wave visualization */}
-        <View style={styles.waveContainer}>
+        {/* Wave visualization - Hidden for now, can be toggled in settings later */}
+        {/* <View style={styles.waveContainer}>
           {[...Array(8)].map((_, i) => (
             <Animated.View
               key={i}
               style={[
                 styles.waveBar,
                 {
-                  height: isPlaying ? waveAnimation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [8, 24],
-                  }) : 8,
+                  transform: [{
+                    scaleY: isPlaying ? waveAnimation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.3, 1],
+                    }) : 0.3
+                  }],
                   opacity: isPlaying ? waveAnimation.interpolate({
                     inputRange: [0, 1],
                     outputRange: [0.3, 1],
@@ -274,7 +293,7 @@ export default function VoiceMessage({
               ]}
             />
           ))}
-        </View>
+        </View> */}
 
         {/* Error state */}
         {playbackError && (
@@ -377,33 +396,37 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
   },
   voiceContent: {
-    padding: 16,
+    padding: 8,
   },
   voiceControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 6,
+    minWidth: 200,
   },
   playButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 8,
   },
   playButtonText: {
-    fontSize: 18,
+    fontSize: 14,
     color: '#FFFFFF',
   },
   voiceInfo: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 100,
   },
   voiceLabel: {
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 2,
+    flexWrap: 'nowrap',
   },
   ownVoiceLabel: {
     color: '#FFFFFF',
@@ -414,6 +437,7 @@ const styles = StyleSheet.create({
   durationLabel: {
     fontSize: 12,
     opacity: 0.8,
+    flexWrap: 'nowrap',
   },
   ownDurationLabel: {
     color: '#FFFFFF',
@@ -422,13 +446,13 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   progressContainer: {
-    marginBottom: 12,
+    marginBottom: 6,
   },
   progressBar: {
-    height: 4,
+    height: 3,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
     borderRadius: 2,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   progressFill: {
     height: '100%',
@@ -450,13 +474,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 32,
+    height: 16,
   },
   waveBar: {
-    width: 3,
+    width: 2,
+    height: 12, // Reduced height for thinner appearance
     backgroundColor: '#FFFFFF',
     marginHorizontal: 1,
-    borderRadius: 1.5,
+    borderRadius: 1,
   },
   errorText: {
     fontSize: 12,

@@ -148,6 +148,19 @@ class StorageService {
   }
 
   /**
+   * Set offline queue to specific array of messages
+   * @param {Array} messages - Array of messages to set as queue
+   */
+  static async setOfflineQueue(messages) {
+    try {
+      await AsyncStorage.setItem(this.OFFLINE_QUEUE_KEY, JSON.stringify(messages));
+      console.log(`📝 Set offline queue to ${messages.length} messages`);
+    } catch (error) {
+      console.error('Error setting offline queue:', error);
+    }
+  }
+
+  /**
    * Clear entire offline queue
    */
   static async clearOfflineQueue() {

@@ -116,12 +116,18 @@ export default async function handler(req, res) {
 async function downloadAudioFromSupabase(audioUrl) {
   try {
     // Extract bucket and file path from URL
-    const urlParts = audioUrl.split('/storage/v1/object/')
+    // URL format: https://...supabase.co/storage/v1/object/public/voice-messages/user/conversation/file.m4a
+    const urlParts = audioUrl.split('/storage/v1/object/public/')
     if (urlParts.length !== 2) {
       throw new Error('Invalid Supabase Storage URL format')
     }
     
-    const [bucket, filePath] = urlParts[1].split('/')
+    const fullPath = urlParts[1] // "voice-messages/user/conversation/file.m4a"
+    const pathParts = fullPath.split('/')
+    const bucket = pathParts[0] // "voice-messages"
+    const filePath = pathParts.slice(1).join('/') // "user/conversation/file.m4a"
+    
+    console.log(`🔍 Downloading from bucket: ${bucket}, file: ${filePath}`)
     
     // Download file using Supabase client
     const { data, error } = await supabase.storage

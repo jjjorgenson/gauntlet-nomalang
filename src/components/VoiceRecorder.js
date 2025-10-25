@@ -3,12 +3,16 @@ import { View, StyleSheet, TouchableOpacity, Animated, Alert } from 'react-nativ
 import { Text, Card, Button, ActivityIndicator } from 'react-native-paper';
 import { Audio } from 'expo-av';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import Config from '../lib/config';
+import VoiceService from '../services/voice';
 
 export default function VoiceRecorder({ 
   conversationId, 
   onRecordingComplete, 
   onRecordingCancel,
-  disabled = false 
+  disabled = false,
+  userLanguage = 'en' // User's preferred language for transcription
 }) {
   const { user } = useAuth();
   const [recording, setRecording] = useState(null);
@@ -200,14 +204,55 @@ export default function VoiceRecorder({
 
       console.log('✅ Voice message uploaded successfully:', voiceUrl);
 
-      // Notify parent component
-      if (onRecordingComplete) {
-        onRecordingComplete({
-          voiceUrl,
-          duration,
-          fileName,
-          timestamp: new Date(timestamp).toISOString()
-        });
+      // Start transcription process
+      console.log('🎯 Starting transcription...');
+      try {
+        const transcriptionResult = await VoiceService.transcribeAudio(voiceUrl, userLanguage);
+        
+        if (transcriptionResult.success) {
+          console.log('✅ Transcription completed:', transcriptionResult.transcription);
+          
+          // Notify parent component with transcription
+          if (onRecordingComplete) {
+            onRecordingComplete({
+              voiceUrl,
+              duration,
+              fileName,
+              timestamp: new Date(timestamp).toISOString(),
+              transcription: transcriptionResult.transcription,
+              transcriptionConfidence: transcriptionResult.confidence,
+              transcriptionLanguage: transcriptionResult.language
+            });
+          }
+        } else {
+          console.warn('⚠️ Transcription failed, sending without transcription');
+          
+          // Notify parent component without transcription
+          if (onRecordingComplete) {
+            onRecordingComplete({
+              voiceUrl,
+              duration,
+              fileName,
+              timestamp: new Date(timestamp).toISOString(),
+              transcription: null,
+              transcriptionError: 'Transcription failed'
+            });
+          }
+        }
+      } catch (transcriptionError) {
+        console.error('❌ Transcription error:', transcriptionError);
+        
+        // Notify parent component with transcription error
+        if (onRecordingComplete) {
+          onRecordingComplete({
+            voiceUrl,
+            duration,
+            fileName,
+            timestamp: new Date(timestamp).toISOString(),
+            transcription: null,
+            transcriptionError: 'Transcription service unavailable'
+          });
+        }
       }
 
       // Reset state
@@ -305,10 +350,12 @@ export default function VoiceRecorder({
                 style={[
                   styles.waveBar,
                   {
-                    height: waveAnimation.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [8, 24],
-                    }),
+                    transform: [{
+                      scaleY: waveAnimation.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.3, 1],
+                      })
+                    }],
                     opacity: waveAnimation.interpolate({
                       inputRange: [0, 1],
                       outputRange: [0.3, 1],
@@ -485,6 +532,7 @@ const styles = StyleSheet.create({
   },
   waveBar: {
     width: 4,
+    height: 24, // Fixed height for scaleY animation
     backgroundColor: '#8B5CF6',
     marginHorizontal: 2,
     borderRadius: 2,

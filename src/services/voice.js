@@ -457,6 +457,11 @@ export class VoiceService {
     const service = new VoiceService();
     return await service.transcribeAudio(audioUrl, language);
   }
+
+  static async deleteAudioFile(fileName) {
+    const service = new VoiceService();
+    return await service.deleteAudioFile(fileName);
+  }
 }
 
 export default VoiceService;

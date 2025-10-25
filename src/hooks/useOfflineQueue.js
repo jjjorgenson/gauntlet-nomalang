@@ -126,6 +126,42 @@ export function useOfflineQueue() {
     return await flushQueue();
   };
 
+  /**
+   * Clear failed messages from queue (messages that have been failing repeatedly)
+   */
+  const clearFailedMessages = async () => {
+    try {
+      // Get all messages from storage
+      const storedQueue = await StorageService.getOfflineQueue();
+      
+      // Filter out messages that are likely to fail (empty content, old temp messages)
+      const validMessages = storedQueue.filter(message => {
+        // Keep messages with valid content
+        if (message.content && message.content.trim() && message.content !== '[Voice Message]') {
+          return true;
+        }
+        // Remove old temp voice messages that are stuck
+        if (message.id && message.id.startsWith('voice_temp_')) {
+          console.log(`🗑️ Removing stuck voice message: ${message.id}`);
+          return false;
+        }
+        return true;
+      });
+
+      // Update storage with only valid messages
+      await StorageService.setOfflineQueue(validMessages);
+      await loadQueue(); // Refresh queue state
+      
+      const removedCount = storedQueue.length - validMessages.length;
+      console.log(`🧹 Cleared ${removedCount} failed messages from queue`);
+      
+      return { removedCount, remainingCount: validMessages.length };
+    } catch (error) {
+      console.error('Error clearing failed messages:', error);
+      return { removedCount: 0, remainingCount: queue.length };
+    }
+  };
+
   return {
     queue,
     isFlushing,
@@ -134,6 +170,7 @@ export function useOfflineQueue() {
     flushQueue,
     clearQueue,
     retryFailedMessages,
+    clearFailedMessages,
     loadQueue
   };
 }

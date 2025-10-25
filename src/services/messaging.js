@@ -54,7 +54,7 @@ export class MessagingService {
       const messageData = {
         conversation_id: conversationId,
         sender_id: senderId,
-        content: transcription || '', // Allow empty transcription initially
+        content: transcription || '[Voice Message]', // Default content for voice messages
         message_type: 'voice',
         voice_url: voiceUrl,
         voice_duration_seconds: duration,
@@ -76,7 +76,7 @@ export class MessagingService {
   }
 
   // Send voice message with automatic upload and retry
-  async sendVoiceMessageWithUpload(audioUri, conversationId, senderId, onProgress = null) {
+  async sendVoiceMessageWithUpload(audioUri, conversationId, senderId, onProgress = null, transcription = null) {
     try {
       console.log('🎤 Starting voice message upload process');
       
@@ -100,8 +100,8 @@ export class MessagingService {
       const messageResult = await this.sendVoiceMessage(
         conversationId,
         uploadResult.voiceUrl,
-        uploadResult.duration || 0,
-        '', // Empty transcription initially
+        uploadResult.duration || 1, // Default to 1 second minimum for database constraint
+        transcription || '', // Use provided transcription or empty string
         senderId
       );
 

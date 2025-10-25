@@ -27,9 +27,16 @@ export default function ConversationScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
   
-  // Translation settings (will be loaded from user profile later)
-  const [userLanguage, setUserLanguage] = useState('en');
+  // Translation settings - get from user profile
+  const [userLanguage, setUserLanguage] = useState(user?.user_metadata?.native_language || 'en');
   const [autoTranslateEnabled, setAutoTranslateEnabled] = useState(false);
+
+  // Update userLanguage when user changes
+  useEffect(() => {
+    if (user?.user_metadata?.native_language) {
+      setUserLanguage(user.user_metadata.native_language);
+    }
+  }, [user]);
   
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -39,7 +46,7 @@ export default function ConversationScreen() {
   
   // Network and offline queue hooks
   const { isOnline } = useNetworkStatus();
-  const { queue, addToQueue, flushQueue } = useOfflineQueue();
+  const { queue, addToQueue, flushQueue, clearFailedMessages } = useOfflineQueue();
   
   const messagingService = useRef(new MessagingService());
   const messageSubscription = useRef(null);
@@ -484,13 +491,13 @@ export default function ConversationScreen() {
       const tempId = `voice_temp_${Date.now()}`;
       const tempMessage = {
         id: tempId,
-        content: '', // Empty transcription initially
+        content: voiceData.transcription || '[Voice Message]', // Use transcription or default content
         sender_id: user.id,
         created_at: new Date().toISOString(),
         message_type: 'voice',
         voice_url: voiceData.voiceUrl,
         voice_duration_seconds: voiceData.duration,
-        detected_language: 'en',
+        detected_language: voiceData.transcriptionLanguage || 'en',
         is_edited: false,
         edited_at: null,
         users: {
@@ -523,7 +530,9 @@ export default function ConversationScreen() {
       const { data, error } = await messagingService.current.sendVoiceMessageWithUpload(
         voiceData.audioUri || voiceData.voiceUrl, // Use original URI if available
         conversationId,
-        user.id
+        user.id,
+        null, // onProgress callback
+        voiceData.transcription // Pass transcription data
       );
 
       if (error) {
@@ -565,6 +574,22 @@ export default function ConversationScreen() {
   const handleVoiceRecordingCancel = () => {
     console.log('🎤 Voice recording cancelled');
     setIsRecording(false);
+  };
+
+  // Clear failed messages from queue
+  const handleClearFailedMessages = async () => {
+    try {
+      console.log('🧹 Clearing failed messages from queue...');
+      const result = await clearFailedMessages();
+      console.log(`✅ Cleared ${result.removedCount} failed messages, ${result.remainingCount} remaining`);
+      
+      // Show a brief success message (you could add a toast here)
+      if (result.removedCount > 0) {
+        console.log('🎉 Failed messages cleared successfully!');
+      }
+    } catch (error) {
+      console.error('❌ Error clearing failed messages:', error);
+    }
   };
   
   const loadMoreMessages = async () => {
@@ -709,6 +734,13 @@ export default function ConversationScreen() {
         <Text style={styles.queueText}>
           📤 {queue.length} message{queue.length > 1 ? 's' : ''} pending
         </Text>
+        {/* Development-only clear button */}
+        <TouchableOpacity 
+          style={styles.clearQueueButton}
+          onPress={handleClearFailedMessages}
+        >
+          <Text style={styles.clearQueueButtonText}>Clear Failed</Text>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -795,6 +827,7 @@ export default function ConversationScreen() {
         onRecordingComplete={handleVoiceRecordingComplete}
         onRecordingCancel={handleVoiceRecordingCancel}
         disabled={sending || voiceUploading}
+        userLanguage={userLanguage}
       />
     </View>
   );
@@ -942,12 +975,26 @@ const styles = StyleSheet.create({
     padding: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#3B82F6',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   queueText: {
     color: '#1E40AF',
     fontSize: 12,
-    textAlign: 'center',
     fontWeight: '500',
+    flex: 1,
+  },
+  clearQueueButton: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  clearQueueButtonText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
   },
   loadingMoreContainer: {
     padding: 16,
