@@ -21,6 +21,7 @@ export default function VoiceMessage({
   const [transcription, setTranscription] = useState(null);
   const [translation, setTranslation] = useState(null);
   const [showTranslation, setShowTranslation] = useState(false);
+  const [messageLanguage, setMessageLanguage] = useState(null);
   
   const positionInterval = useRef(null);
   const waveAnimation = useRef(new Animated.Value(0)).current;
@@ -47,6 +48,11 @@ export default function VoiceMessage({
       performTranscription();
     }
 
+    // Detect message language when transcription is available
+    if (transcription && !messageLanguage) {
+      detectMessageLanguage();
+    }
+
     return () => {
       // Cleanup on unmount
       if (sound) {
@@ -57,6 +63,21 @@ export default function VoiceMessage({
       }
     };
   }, [voiceUrl, voiceDuration]);
+
+  // Detect message language
+  const detectMessageLanguage = async () => {
+    if (!transcription) return;
+    
+    try {
+      const LanguageService = (await import('../services/language')).default;
+      const detection = LanguageService.detectLanguage(transcription);
+      const detectedLanguage = LanguageService.toISO6391(detection.language) || 'en';
+      setMessageLanguage(detectedLanguage);
+    } catch (error) {
+      console.error('❌ Language detection error:', error);
+      setMessageLanguage('en'); // Default to English
+    }
+  };
 
   // Real transcription process using VoiceService
   const performTranscription = async () => {
@@ -206,10 +227,8 @@ export default function VoiceMessage({
       // Import translation service dynamically
       const TranslationService = (await import('../services/translation')).default;
       
-      // Detect source language from transcription
-      const LanguageService = (await import('../services/language')).default;
-      const detection = LanguageService.detectLanguage(transcription);
-      const sourceLanguage = detection.language || 'en';
+      // Use detected message language
+      const sourceLanguage = messageLanguage || 'en';
       
       // Don't translate if source and target are the same
       if (sourceLanguage === userLanguage) {
@@ -343,7 +362,7 @@ export default function VoiceMessage({
             ) : (
               <View>
                 <Text style={styles.transcriptionText}>{transcription}</Text>
-                {!isOwn && userLanguage !== 'en' && (
+                {!isOwn && messageLanguage && messageLanguage !== userLanguage && (
                   <Button
                     mode="text"
                     onPress={handleTranslate}
