@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { Text, Card, IconButton, ActivityIndicator } from 'react-native-paper';
+import { Text, Card, IconButton, ActivityIndicator, Button } from 'react-native-paper';
 import { Audio } from 'expo-av';
 import { useAuth } from '../contexts/AuthContext';
 
