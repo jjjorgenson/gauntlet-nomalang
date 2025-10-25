@@ -62,7 +62,7 @@ export default function VoiceMessage({
         clearInterval(positionInterval.current);
       }
     };
-  }, [voiceUrl, voiceDuration]);
+  }, [voiceUrl, voiceDuration, transcription, messageLanguage]);
 
   // Detect message language
   const detectMessageLanguage = async () => {
