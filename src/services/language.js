@@ -387,6 +387,36 @@ export class LanguageService {
     
     return `${flag} ${name}`;
   }
+
+  // Get common languages for settings picker
+  static getCommonLanguages() {
+    return [
+      { code: 'en', english: 'English', native: 'English' },
+      { code: 'es', english: 'Spanish', native: 'Español' },
+      { code: 'fr', english: 'French', native: 'Français' },
+      { code: 'de', english: 'German', native: 'Deutsch' },
+      { code: 'it', english: 'Italian', native: 'Italiano' },
+      { code: 'pt', english: 'Portuguese', native: 'Português' },
+      { code: 'zh', english: 'Chinese', native: '中文' },
+      { code: 'ja', english: 'Japanese', native: '日本語' },
+      { code: 'ar', english: 'Arabic', native: 'العربية' },
+      { code: 'ru', english: 'Russian', native: 'Русский' },
+      { code: 'ko', english: 'Korean', native: '한국어' },
+      { code: 'hi', english: 'Hindi', native: 'हिन्दी' },
+      { code: 'nl', english: 'Dutch', native: 'Nederlands' },
+      { code: 'sv', english: 'Swedish', native: 'Svenska' },
+      { code: 'no', english: 'Norwegian', native: 'Norsk' }
+    ];
+  }
+
+  // Format language for settings display
+  static formatLanguageForSettings(code) {
+    const language = this.getCommonLanguages().find(lang => lang.code === code);
+    if (!language) {
+      return this.getLanguageName(code);
+    }
+    return `${language.english} / ${language.native}`;
+  }
 }
 
 export default LanguageService;
