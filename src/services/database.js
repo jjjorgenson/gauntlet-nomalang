@@ -98,25 +98,33 @@ export class DatabaseService {
   static async addConversationParticipants(conversationId, userIds) {
     console.log('🗄️ DatabaseService.addConversationParticipants called with:', { conversationId, userIds });
     
-    const participants = userIds.map(userId => ({
-      conversation_id: conversationId,
-      user_id: userId
-    }));
-
-    console.log('👥 Participants data to insert:', participants);
-
-    const { data, error } = await supabase
-      .from('conversation_participants')
-      .insert(participants)
-      .select();
-    
-    if (error) {
+    try {
+      // Use the SECURITY DEFINER function for adding participants
+      // This bypasses RLS while maintaining security checks
+      const results = [];
+      
+      for (const userId of userIds) {
+        console.log('👥 Adding participant:', userId);
+        
+        const { data, error } = await supabase.rpc('add_conversation_participant', {
+          p_conversation_id: conversationId,
+          p_user_id: userId
+        });
+        
+        if (error) {
+          console.error('❌ Error adding participant:', userId, error);
+          // Continue with other participants even if one fails
+        } else {
+          console.log('✅ Successfully added participant:', userId);
+          results.push({ user_id: userId, success: true });
+        }
+      }
+      
+      return { data: results, error: null };
+    } catch (error) {
       console.error('❌ DatabaseService.addConversationParticipants error:', error);
-    } else {
-      console.log('✅ DatabaseService.addConversationParticipants success:', data);
+      return { data: null, error };
     }
-    
-    return { data, error };
   }
 
   static async getUserConversations(userId) {
