@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text, Card, Button, ActivityIndicator } from 'react-native-paper';
 import TranslationService from '../services/translation';
+import LanguageService from '../services/language';
 
 export default function TranslatedMessage({ 
   message, 
@@ -16,20 +17,20 @@ export default function TranslatedMessage({
 
   // Detect message language on mount
   const languageDetection = TranslationService.detectLanguage(message.content);
-  const messageLanguage = languageDetection.language;
+  const messageLanguage = LanguageService.toISO6391(languageDetection.language);
   const languageConfidence = languageDetection.confidence;
   
   // Debug logging
   console.log('🔍 TranslatedMessage - Message:', message.content);
   console.log('🔍 TranslatedMessage - Language Detection:', languageDetection);
-  console.log('🔍 TranslatedMessage - Message Language:', messageLanguage);
+  console.log('🔍 TranslatedMessage - Message Language (normalized):', messageLanguage);
+  console.log('🔍 TranslatedMessage - User Language:', userLanguage);
   console.log('🔍 TranslatedMessage - Confidence:', languageConfidence);
   
   // Check if translation is needed
-  const needsTranslation = TranslationService.shouldTranslate(
+  const needsTranslation = TranslationService.needsTranslation(
     messageLanguage, 
-    userLanguage, 
-    autoTranslateEnabled
+    userLanguage
   );
 
   // Auto-translate if enabled and needed

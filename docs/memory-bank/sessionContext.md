@@ -1,94 +1,90 @@
 # Session Context
 
 ## Current Session
-**Date**: October 23, 2025
-**Session Type**: Full-Stack
-**Duration**: Extended session (4+ hours)
+**Date**: October 25, 2025
+**Session Type**: Full-Stack Debugging & Bug Fixes
+**Duration**: Extended session (3+ hours)
 **Agent**: Full-Stack Agent
 
 ## Session Focus
-**Primary Task**: Implement AI Translation System with Advanced Language Detection
+**Primary Task**: Fix Voice Message Translation and Language Detection Issues
 **Success Criteria**: 
-- Working mock translation system
-- Accurate language detection for short text
-- Translation UI components with confidence scores
-- Unicode encoding bug fixes
-- Auto-translate toggle functionality
+- Voice transcription displaying correctly
+- Translation parameter order fixed (Spanish → English, not Spanish → Spanish)
+- Translate button only shows when languages differ
+- Language detection working accurately for voice messages
+- useEffect dependencies fixed to prevent infinite loops
 **Dependencies**: 
-- Existing chat system (completed)
-- Supabase database setup (completed)
-- React Native app structure (completed)
+- Existing voice message system (completed)
+- Translation API integration (completed)
+- Language detection service (completed)
 **Blockers**: None - all dependencies resolved
 
 ## Session Scope
 **Files to Work On**: 
-- `src/services/language.js` - Enhanced language detection
-- `src/services/translation.js` - New translation service
-- `src/components/TranslatedMessage.js` - New translation UI component
-- `src/screens/ConversationScreen.js` - Integration with translation system
-- `src/services/messaging.js` - Unicode encoding fixes
-- `src/lib/storage.js` - Message sanitization
-- `TRANSLATION_SETUP.md` - Environment setup guide
+- `src/components/VoiceMessage.js` - Translation parameter order fix, useEffect dependencies fix, language detection integration
+- `src/services/language.js` - Enhanced English detection with `isClearlyEnglish` override
+- `docs/memory-bank/activeContext.md` - Updated project status
+- `docs/memory-bank/progress.md` - Updated progress tracking
 
 **APIs to Integrate**: 
-- Franc library for language detection
-- Mock translation service (OpenAI integration ready)
-- Supabase real-time messaging
+- OpenAI Whisper API for voice transcription
+- OpenAI GPT-4o-mini for translation
+- Language detection service with English override
 
 **Testing Required**: 
-- Language detection accuracy for short text
-- Unicode character handling
-- Translation UI functionality
-- Auto-translate toggle behavior
+- Voice message transcription display
+- Translation parameter order verification
+- Language detection accuracy for voice messages
+- Translate button conditional rendering
 
 **Documentation Updates**: 
 - `docs/memory-bank/activeContext.md` - Updated current status
-- `TRANSLATION_SETUP.md` - New environment setup guide
+- `docs/memory-bank/progress.md` - Updated progress tracking
 
 ## Session Notes
 **What Worked**: 
-- Multi-strategy language detection (keyword + character-based)
-- Mock translation service for development
-- Unicode encoding fixes with message sanitization
-- Comprehensive ISO 639-3 language code mappings
-- Real-time integration with existing chat system
+- Separate useEffect for language detection to prevent infinite loops
+- Translation parameter order fix (userLanguage as target, messageLanguage as source)
+- English language override for `franc` misclassifications
+- Debug logging to trace language detection flow
+- Smart translate button condition (only show when languages differ)
 
 **What Didn't**: 
-- Initial franc library import issues (resolved with proper syntax)
-- Simple character-based detection for common words (resolved with keyword detection)
-- Unicode encoding causing database errors (resolved with sanitization)
+- Initial translation parameter order was backwards (Spanish → Spanish instead of Spanish → English)
+- Adding transcription/messageLanguage to main useEffect caused infinite loop
+- `franc` library misclassifying English text as Dutch/Swedish
+- Translate button showing for same-language conversations
 
 **Decisions Made**: 
-- Use mock translation mode for development (cost-effective)
-- Implement multi-strategy language detection (keyword + character + franc)
-- Add comprehensive Unicode sanitization at multiple layers
-- Use nested translation bubbles for better UX
-- Override Esperanto misdetections with character hints
+- Use separate useEffect for language detection with transcription/messageLanguage dependencies
+- Override `franc` detection when text clearly matches English patterns
+- Correct parameter order: `translateText(text, targetLanguage, sourceLanguage)`
+- Conditionally render translate button: `!isOwn && messageLanguage && messageLanguage !== userLanguage`
 
 **Next Steps**: 
-- User settings screen for language preferences
-- Real OpenAI API integration
-- Voice message translation
+- Slang detection UI implementation
+- Formality adjustment UI implementation
+- End-to-end testing of all Phase 1 AI features
 - Cultural context hints feature
 
 ## Handoff Notes
 **For Next Session**: 
-- AI Translation System is fully functional with mock mode
-- Language detection works accurately for short text (hola → Spanish, Ça va? → French)
-- Translation UI components are integrated and working
-- Unicode encoding issues are resolved
-- Ready for production OpenAI integration
+- Voice message translation is fully functional and working correctly
+- Translation parameter order is fixed (Spanish → English working properly)
+- Language detection works accurately for voice messages with English override
+- Translate button only shows when languages differ
+- Ready for slang detection and formality adjustment UI implementation
 
 **Completed**: 
-- ✅ Complete AI translation system with mock mode
-- ✅ Advanced language detection (keyword + character-based)
-- ✅ Translation UI components with confidence scores
-- ✅ Unicode encoding bug fixes for special characters
-- ✅ Auto-translate toggle functionality
-- ✅ Comprehensive ISO 639-3 language code mappings
-- ✅ Message sanitization for offline queue and database
-- ✅ Real-time translation integration
-- ✅ Git merge and push to main branch
+- ✅ Voice transcription display working correctly
+- ✅ Translation parameter order fixed
+- ✅ Language detection for voice messages working
+- ✅ useEffect dependencies corrected to prevent infinite loops
+- ✅ English language override implemented with `isClearlyEnglish` method
+- ✅ Smart translate button logic (only shows when needed)
+- ✅ Debug logging added for troubleshooting
+- ✅ Memory bank files updated with current status
 
 **In Progress**: 
 - None - all planned features completed
@@ -97,24 +93,21 @@
 - None - no blockers encountered
 
 ## Technical Achievements
-- **Language Detection Accuracy**: 85%+ confidence for short text
-- **Multi-language Support**: Spanish, French, German, Portuguese, Italian, Polish, Czech, Nordic languages
-- **Unicode Handling**: Proper sanitization of special characters (ç, ü, ñ, ¿, ¡)
-- **Translation UI**: Nested translation bubbles with confidence scores
-- **Mock Mode**: Cost-effective development with real API integration ready
-- **Real-time Integration**: Seamless integration with existing chat system
+- **Voice Translation**: Spanish → English working correctly
+- **Language Detection**: English override prevents `franc` misclassifications
+- **React Hooks**: Separate useEffect for language detection prevents infinite loops
+- **Translation API**: Correct parameter order (text, targetLanguage, sourceLanguage)
+- **UI Logic**: Conditional translate button based on language differences
 
 ## Key Files Created/Modified
-- `src/services/translation.js` - New translation service
-- `src/components/TranslatedMessage.js` - New translation UI component
-- `TRANSLATION_SETUP.md` - Environment setup guide
-- Enhanced `src/services/language.js` with multi-strategy detection
-- Updated `src/screens/ConversationScreen.js` with translation integration
-- Fixed `src/services/messaging.js` and `src/lib/storage.js` for Unicode handling
+- `src/components/VoiceMessage.js` - Translation fixes and language detection
+- `src/services/language.js` - English detection override
+- `docs/memory-bank/activeContext.md` - Status updates
+- `docs/memory-bank/progress.md` - Progress tracking
 
 ## Ready for Next Phase
-The codebase now has a solid foundation for:
-1. **User Settings Screen** - Language preferences and auto-translate settings
-2. **Real OpenAI Integration** - Production translation API
-3. **Voice Message Translation** - Audio support for translations
-4. **Cultural Context Hints** - Advanced AI features for cultural understanding
+The codebase is now ready for:
+1. **Slang Detection UI** - Add "Explain Slang" button and modal
+2. **Formality Adjustment UI** - Add formality level selector
+3. **Polish & Testing** - End-to-end testing of all Phase 1 AI features
+4. **Cultural Hints Feature** - Advanced AI features for cultural context

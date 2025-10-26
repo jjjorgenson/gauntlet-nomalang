@@ -28,23 +28,30 @@ class TranslationService {
   }
 
   /**
-   * Determine if a message should be translated
+   * Determine if a message needs translation based on language difference
    * @param {string} messageLanguage - Detected language of the message
    * @param {string} userLanguage - User's preferred language
-   * @param {boolean} autoTranslateEnabled - Whether auto-translate is enabled
-   * @returns {boolean} - Whether translation is needed
+   * @returns {boolean} - Whether translation is needed (languages differ)
    */
-  shouldTranslate(messageLanguage, userLanguage, autoTranslateEnabled) {
+  needsTranslation(messageLanguage, userLanguage) {
     // Handle both string and object formats for backward compatibility
     const language = typeof messageLanguage === 'string' ? messageLanguage : messageLanguage.language;
     
-    // Don't translate if languages match
-    if (language === userLanguage) {
-      return false;
-    }
+    // Normalize both language codes to ISO 639-1 (2-char) for consistent comparison
+    const normalizedMessageLanguage = LanguageService.toISO6391(language);
+    const normalizedUserLanguage = LanguageService.toISO6391(userLanguage);
     
-    // Only translate if auto-translate is enabled
-    return autoTranslateEnabled;
+    console.log('🔍 needsTranslation comparison:', {
+      originalMessageLanguage: language,
+      originalUserLanguage: userLanguage,
+      normalizedMessageLanguage,
+      normalizedUserLanguage
+    });
+    
+    // Return true if languages differ (translation needed)
+    const needsTranslation = normalizedMessageLanguage !== normalizedUserLanguage;
+    console.log('✅ Translation needed:', needsTranslation ? 'YES (languages differ)' : 'NO (same language)');
+    return needsTranslation;
   }
 
   /**

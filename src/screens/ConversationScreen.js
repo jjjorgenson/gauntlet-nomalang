@@ -30,13 +30,22 @@ export default function ConversationScreen() {
   // Translation settings - get from user profile
   const [userLanguage, setUserLanguage] = useState(user?.user_metadata?.native_language || 'en');
   const [autoTranslateEnabled, setAutoTranslateEnabled] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
-  // Update userLanguage when user changes
+  // Load user settings on mount
   useEffect(() => {
-    if (user?.user_metadata?.native_language) {
-      setUserLanguage(user.user_metadata.native_language);
-    }
-  }, [user]);
+    const loadUserSettings = async () => {
+      if (user?.id && !settingsLoaded) {
+        const { data: profile } = await DatabaseService.getUserProfile(user.id);
+        if (profile) {
+          setAutoTranslateEnabled(profile.auto_translate_enabled || false);
+          setUserLanguage(profile.native_language || 'en');
+        }
+        setSettingsLoaded(true);
+      }
+    };
+    loadUserSettings();
+  }, [user?.id, settingsLoaded]);
   
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -629,6 +638,16 @@ export default function ConversationScreen() {
     }
   };
 
+  // Update toggle handler to persist to database
+  const handleAutoTranslateToggle = async () => {
+    const newValue = !autoTranslateEnabled;
+    setAutoTranslateEnabled(newValue);
+    
+    if (user?.id) {
+      await DatabaseService.updateAutoTranslateSetting(user.id, newValue);
+    }
+  };
+
   const renderMessage = ({ item }) => {
     // Handle voice messages
     if (item.messageType === 'voice') {
@@ -783,7 +802,7 @@ export default function ConversationScreen() {
             styles.toggleButton,
             autoTranslateEnabled && styles.toggleButtonActive
           ]}
-          onPress={() => setAutoTranslateEnabled(!autoTranslateEnabled)}
+          onPress={handleAutoTranslateToggle}
         >
           <Text style={[
             styles.toggleButtonText,

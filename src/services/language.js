@@ -34,6 +34,12 @@ export class LanguageService {
    * @returns {string} - 2-character language code
    */
   static toISO6391(iso6392Code) {
+    // If already 2-char, return as-is (idempotent)
+    if (!iso6392Code || iso6392Code.length <= 2) {
+      return iso6392Code || 'en';
+    }
+    
+    // Convert 3-char to 2-char using mapping
     return this.languageCodeMap[iso6392Code] || iso6392Code.slice(0, 2);
   }
 

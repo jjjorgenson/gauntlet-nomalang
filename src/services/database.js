@@ -40,6 +40,12 @@ export class DatabaseService {
     return { data, error };
   }
 
+  static async updateAutoTranslateSetting(userId, enabled) {
+    return await this.updateUserProfile(userId, { 
+      auto_translate_enabled: enabled 
+    });
+  }
+
   static async searchUsers(query) {
     const { data, error } = await supabase
       .from('users')

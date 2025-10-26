@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { Text, Card, IconButton, ActivityIndicator, Button } from 'react-native-paper';
 import { Audio } from 'expo-av';
 import { useAuth } from '../contexts/AuthContext';
+import LanguageService from '../services/language';
 
 export default function VoiceMessage({ 
   message, 
@@ -71,6 +72,22 @@ export default function VoiceMessage({
     }
   }, [transcription, messageLanguage]);
 
+  // Auto-translate if enabled and needed
+  useEffect(() => {
+    console.log('🔄 VoiceMessage auto-translate check:', {
+      needsTranslation,
+      autoTranslateEnabled,
+      transcription: !!transcription,
+      translation: !!translation,
+      messageLanguage
+    });
+    
+    if (needsTranslation && autoTranslateEnabled && transcription && !translation) {
+      console.log('✅ Auto-translating voice message');
+      handleTranslate();
+    }
+  }, [needsTranslation, autoTranslateEnabled, transcription, translation, messageLanguage]);
+
   // Detect message language
   const detectMessageLanguage = async () => {
     if (!transcription) return;
@@ -88,6 +105,10 @@ export default function VoiceMessage({
     }
   };
 
+  // Check if translation is needed (similar to TranslatedMessage)
+  const needsTranslation = messageLanguage && 
+    LanguageService.toISO6391(messageLanguage) !== LanguageService.toISO6391(userLanguage);
+
   // Real transcription process using VoiceService
   const performTranscription = async () => {
     if (!voiceUrl) return;
@@ -100,7 +121,7 @@ export default function VoiceMessage({
       // Import VoiceService dynamically to avoid circular imports
       const VoiceService = (await import('../services/voice')).default;
       
-      const result = await VoiceService.transcribeAudio(voiceUrl, userLanguage);
+      const result = await VoiceService.transcribeAudio(voiceUrl, 'auto');
       
       if (result.success) {
         console.log('✅ Transcription completed:', result.transcription);
@@ -371,8 +392,8 @@ export default function VoiceMessage({
             ) : (
               <View>
                 <Text style={styles.transcriptionText}>{transcription}</Text>
-                 {console.log('🔍 VoiceMessage: Translate button check - isOwn:', isOwn, 'messageLanguage:', messageLanguage, 'userLanguage:', userLanguage)}
-                 {!isOwn && messageLanguage && messageLanguage !== userLanguage && (
+                 {console.log('🔍 VoiceMessage: Translate button check - isOwn:', isOwn, 'messageLanguage:', messageLanguage, 'userLanguage:', userLanguage, 'normalized comparison:', LanguageService.toISO6391(messageLanguage), '!==', LanguageService.toISO6391(userLanguage))}
+                 {!isOwn && needsTranslation && !autoTranslateEnabled && !translation && (
                   <Button
                     mode="text"
                     onPress={handleTranslate}
@@ -392,7 +413,7 @@ export default function VoiceMessage({
 
   // Render translation
   const renderTranslation = () => {
-    if (!translation || !showTranslation) return null;
+    if (!translation) return null;
 
     return (
       <View style={styles.translationContainer}>
