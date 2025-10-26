@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
+import * as SecureStore from 'expo-secure-store';
 
 const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey || process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -8,9 +9,22 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
+// Custom storage adapter for Expo SecureStore
+const ExpoSecureStoreAdapter = {
+  getItem: (key) => {
+    return SecureStore.getItemAsync(key);
+  },
+  setItem: (key, value) => {
+    return SecureStore.setItemAsync(key, value);
+  },
+  removeItem: (key) => {
+    return SecureStore.deleteItemAsync(key);
+  },
+};
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: require('expo-secure-store').default,
+    storage: ExpoSecureStoreAdapter,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

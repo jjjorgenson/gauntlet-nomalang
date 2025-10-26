@@ -58,71 +58,54 @@ export class DatabaseService {
 
   // Conversation operations
   static async createConversation(conversationData) {
-    console.log('🗄️ DatabaseService.createConversation called with:', conversationData);
-    
-    // Debug authentication context
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    console.log('🔐 Auth context - User:', user ? { id: user.id, email: user.email } : 'NULL');
-    console.log('🔐 Auth context - Auth error:', authError);
-    
     const { data, error } = await supabase
       .from('conversations')
       .insert(conversationData)
       .select()
       .single();
     
-    if (error) {
-      console.error('❌ DatabaseService.createConversation error:', error);
-      console.error('❌ Full error details:', JSON.stringify(error, null, 2));
-    } else {
-      console.log('✅ DatabaseService.createConversation success:', data);
-    }
-    
     return { data, error };
   }
 
   static async addParticipantToConversation(conversationId, userId, participantData = {}) {
-    const { data, error } = await supabase
-      .from('conversation_participants')
-      .insert({
-        conversation_id: conversationId,
-        user_id: userId,
-        ...participantData
-      })
-      .select()
-      .single();
-    
-    return { data, error };
+    try {
+      // Use the SECURITY DEFINER function for adding participants
+      const { data, error } = await supabase.rpc('add_conversation_participant', {
+        p_conversation_id: conversationId,
+        p_user_id: userId
+      });
+      
+      if (error) {
+        return { data: null, error };
+      }
+      
+      return { data: { conversation_id: conversationId, user_id: userId }, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
   }
 
   static async addConversationParticipants(conversationId, userIds) {
-    console.log('🗄️ DatabaseService.addConversationParticipants called with:', { conversationId, userIds });
-    
     try {
       // Use the SECURITY DEFINER function for adding participants
       // This bypasses RLS while maintaining security checks
       const results = [];
       
       for (const userId of userIds) {
-        console.log('👥 Adding participant:', userId);
-        
         const { data, error } = await supabase.rpc('add_conversation_participant', {
           p_conversation_id: conversationId,
           p_user_id: userId
         });
         
         if (error) {
-          console.error('❌ Error adding participant:', userId, error);
           // Continue with other participants even if one fails
         } else {
-          console.log('✅ Successfully added participant:', userId);
           results.push({ user_id: userId, success: true });
         }
       }
       
       return { data: results, error: null };
     } catch (error) {
-      console.error('❌ DatabaseService.addConversationParticipants error:', error);
       return { data: null, error };
     }
   }
