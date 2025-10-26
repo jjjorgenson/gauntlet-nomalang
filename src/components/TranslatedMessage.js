@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text, Card, Button, ActivityIndicator } from 'react-native-paper';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { Text, Card, Button, ActivityIndicator, IconButton } from 'react-native-paper';
 import TranslationService from '../services/translation';
 import LanguageService from '../services/language';
+import SlangService from '../services/slang';
+import SlangExplanationModal from './SlangExplanationModal';
 
 export default function TranslatedMessage({ 
   message, 
@@ -14,6 +16,15 @@ export default function TranslatedMessage({
   const [isTranslating, setIsTranslating] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
   const [translationError, setTranslationError] = useState(null);
+  
+  // Slang detection state
+  const [showSlangModal, setShowSlangModal] = useState(false);
+  const [slangExplanation, setSlangExplanation] = useState(null);
+  const [isExplainingSlang, setIsExplainingSlang] = useState(false);
+  const [slangError, setSlangError] = useState(null);
+
+  // Animation state
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Detect message language on mount
   const languageDetection = TranslationService.detectLanguage(message.content);
@@ -39,6 +50,17 @@ export default function TranslatedMessage({
       handleTranslate();
     }
   }, [needsTranslation, autoTranslateEnabled, translation]);
+
+  // Animate translation when it appears
+  useEffect(() => {
+    if (translation) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [translation, fadeAnim]);
 
   const handleTranslate = async () => {
     if (isTranslating) return;
@@ -72,6 +94,30 @@ export default function TranslatedMessage({
     setShowTranslation(!showTranslation);
   };
 
+  const handleExplainSlang = async () => {
+    if (isExplainingSlang) return;
+    
+    setIsExplainingSlang(true);
+    setSlangError(null);
+    setShowSlangModal(true);
+    
+    try {
+      const explanation = await SlangService.explainSlang(message.content, userLanguage);
+      setSlangExplanation(explanation);
+    } catch (error) {
+      console.error('Slang explanation error:', error);
+      setSlangError('Failed to explain slang. Please try again.');
+    } finally {
+      setIsExplainingSlang(false);
+    }
+  };
+
+  const dismissSlangModal = () => {
+    setShowSlangModal(false);
+    setSlangExplanation(null);
+    setSlangError(null);
+  };
+
   const renderOriginalMessage = () => (
     <Card style={styles.originalMessage}>
       <Card.Content>
@@ -86,6 +132,13 @@ export default function TranslatedMessage({
                 {Math.round(languageConfidence * 100)}%
               </Text>
             )}
+            <IconButton
+              icon="help-circle-outline"
+              size={16}
+              iconColor="#8B5CF6"
+              onPress={handleExplainSlang}
+              style={styles.slangButton}
+            />
           </View>
           <Text style={styles.timestamp}>
             {new Date(message.timestamp).toLocaleTimeString()}
@@ -99,7 +152,7 @@ export default function TranslatedMessage({
     if (!translation) return null;
 
     return (
-      <View style={styles.translationContainer}>
+      <Animated.View style={[styles.translationContainer, { opacity: fadeAnim }]}>
         <Card style={styles.translationBubble}>
           <Card.Content>
             <View style={styles.translationHeader}>
@@ -120,7 +173,7 @@ export default function TranslatedMessage({
             )}
           </Card.Content>
         </Card>
-      </View>
+      </Animated.View>
     );
   };
 
@@ -194,6 +247,15 @@ export default function TranslatedMessage({
           </Button>
         </View>
       )}
+      
+      <SlangExplanationModal
+        visible={showSlangModal}
+        onDismiss={dismissSlangModal}
+        slangText={message.content}
+        explanation={slangExplanation}
+        isLoading={isExplainingSlang}
+        error={slangError}
+      />
     </View>
   );
 }
@@ -329,5 +391,10 @@ const styles = StyleSheet.create({
   toggleButtonText: {
     color: '#8B5CF6',
     fontSize: 12,
+  },
+  slangButton: {
+    margin: 0,
+    padding: 0,
+    marginLeft: 4,
   },
 });

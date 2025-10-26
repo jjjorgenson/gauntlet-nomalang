@@ -55,6 +55,36 @@ class TranslationService {
   }
 
   /**
+   * Fetch with retry logic and exponential backoff
+   * @param {string} url - URL to fetch
+   * @param {Object} options - Fetch options
+   * @param {number} maxRetries - Maximum number of retries
+   * @returns {Promise<Response>} - Fetch response
+   */
+  async fetchWithRetry(url, options, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const response = await fetch(url, options);
+        if (response.ok) return response;
+        
+        // Don't retry on 4xx errors (client errors)
+        if (response.status >= 400 && response.status < 500) {
+          throw new Error(`Client error: ${response.status}`);
+        }
+        
+        // Retry on 5xx errors (server errors)
+        if (i < maxRetries - 1) {
+          const delay = Math.pow(2, i) * 1000; // 1s, 2s, 4s
+          console.log(`🔄 Retry ${i + 1}/${maxRetries} after ${delay}ms`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      } catch (error) {
+        if (i === maxRetries - 1) throw error;
+      }
+    }
+  }
+
+  /**
    * Translate text from source language to target language
    * @param {string} text - Text to translate
    * @param {string} targetLanguage - Target language code (e.g., 'en', 'es')
@@ -134,7 +164,7 @@ class TranslationService {
     }
 
     try {
-      const response = await fetch(apiUrl, {
+      const response = await this.fetchWithRetry(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -146,11 +176,6 @@ class TranslationService {
         }),
         timeout: this.config.getApiConfig().timeout
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Translation API error: ${response.status} - ${errorData.message || response.statusText}`);
-      }
 
       const result = await response.json();
       
@@ -170,6 +195,17 @@ class TranslationService {
 
     } catch (error) {
       console.error('Translation API error:', error);
+      
+      // Provide better error messages
+      let errorMessage = 'Translation failed. Please try again.';
+      
+      if (error.message.includes('Client error')) {
+        errorMessage = 'Translation service temporarily unavailable.';
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Request took too long. Please try again.';
+      } else if (error.message.includes('Network')) {
+        errorMessage = 'No internet connection. Please try again.';
+      }
       
       // Fallback to mock translation if API fails
       console.warn('Falling back to mock translation due to API error');
