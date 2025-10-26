@@ -62,16 +62,25 @@ export default function VoiceMessage({
         clearInterval(positionInterval.current);
       }
     };
-  }, [voiceUrl, voiceDuration, transcription, messageLanguage]);
+  }, [voiceUrl, voiceDuration]);
+
+  // Separate useEffect for language detection when transcription is available
+  useEffect(() => {
+    if (transcription && !messageLanguage) {
+      detectMessageLanguage();
+    }
+  }, [transcription, messageLanguage]);
 
   // Detect message language
   const detectMessageLanguage = async () => {
     if (!transcription) return;
     
     try {
+      console.log('🔍 VoiceMessage: Detecting language for transcription:', transcription);
       const LanguageService = (await import('../services/language')).default;
       const detection = LanguageService.detectLanguage(transcription);
       const detectedLanguage = LanguageService.toISO6391(detection.language) || 'en';
+      console.log('🔍 VoiceMessage: Detected language:', detectedLanguage, 'User language:', userLanguage);
       setMessageLanguage(detectedLanguage);
     } catch (error) {
       console.error('❌ Language detection error:', error);
@@ -239,8 +248,8 @@ export default function VoiceMessage({
       // Translate transcription to user's language
       const result = await TranslationService.translateText(
         transcription,
-        sourceLanguage,
-        userLanguage
+        userLanguage,    // targetLanguage (user's language)
+        sourceLanguage    // sourceLanguage (detected message language)
       );
       
       setTranslation({
@@ -362,7 +371,8 @@ export default function VoiceMessage({
             ) : (
               <View>
                 <Text style={styles.transcriptionText}>{transcription}</Text>
-                {!isOwn && messageLanguage && messageLanguage !== userLanguage && (
+                 {console.log('🔍 VoiceMessage: Translate button check - isOwn:', isOwn, 'messageLanguage:', messageLanguage, 'userLanguage:', userLanguage)}
+                 {!isOwn && messageLanguage && messageLanguage !== userLanguage && (
                   <Button
                     mode="text"
                     onPress={handleTranslate}
