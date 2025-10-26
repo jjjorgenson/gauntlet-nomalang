@@ -394,16 +394,30 @@ export class VoiceService {
       throw new Error('Transcription API endpoint not configured');
     }
 
+    // Validate and sanitize audioUrl
+    if (!audioUrl || typeof audioUrl !== 'string') {
+      throw new Error('Invalid audio URL provided');
+    }
+
+    // Log the request details for debugging
+    console.log('🎯 Transcription request:', {
+      audioUrl: audioUrl.substring(0, 100) + '...', // Truncate for logging
+      language,
+      apiUrl
+    });
+
     try {
+      const requestBody = {
+        audioUrl: audioUrl.trim(), // Remove any whitespace
+        language: language || 'en'
+      };
+
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          audioUrl,
-          language
-        }),
+        body: JSON.stringify(requestBody),
         timeout: Config.getApiConfig().timeout
       });
 

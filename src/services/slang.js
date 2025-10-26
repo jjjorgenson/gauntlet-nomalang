@@ -49,7 +49,7 @@ class SlangService {
       return this.cache.get(cacheKey);
     }
 
-    const apiUrl = Config.getEndpoint('explain-slang');
+        const apiUrl = Config.getEndpoint('slang');
     
     if (!apiUrl) {
       throw new Error('Slang explanation API endpoint not configured');
@@ -72,16 +72,42 @@ class SlangService {
 
       const result = await response.json();
       
-      // Validate response format
-      if (!result.meaning) {
+      // Validate response format - backend returns {has_slang: boolean, terms: array}
+      if (result.has_slang === undefined) {
         throw new Error('Invalid slang API response format');
       }
 
-      // Cache the result
-      this.cache.set(cacheKey, result);
+      // If no slang detected, return appropriate response
+      if (!result.has_slang) {
+        return {
+          meaning: 'No slang detected in this text.',
+          context: 'The text appears to be in standard language.',
+          example: null
+        };
+      }
+
+      // If slang detected, format the response for the UI
+      if (!result.terms || result.terms.length === 0) {
+        throw new Error('Slang detected but no terms provided');
+      }
+
+      // Combine all slang terms into a single explanation
+      const slangTerms = result.terms.map(term => term.term).join(', ');
+      const explanations = result.terms.map(term => term.explanation).join('; ');
+      const contexts = result.terms.map(term => term.context).join('; ');
+
+      const formattedResult = {
+        meaning: explanations,
+        context: contexts,
+        example: slangTerms,
+        terms: result.terms // Keep original terms for detailed view
+      };
+
+      // Cache the formatted result
+      this.cache.set(cacheKey, formattedResult);
       
-      console.log('✅ Slang explained:', result);
-      return result;
+      console.log('✅ Slang explained:', formattedResult);
+      return formattedResult;
 
     } catch (error) {
       console.error('❌ Slang API error:', error);

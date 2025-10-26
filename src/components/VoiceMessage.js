@@ -127,12 +127,20 @@ export default function VoiceMessage({
         console.log('✅ Transcription completed:', result.transcription);
         setTranscription(result.transcription);
       } else {
-        console.warn('⚠️ Transcription failed');
+        console.warn('⚠️ Transcription failed:', result.error);
         setTranscription(null);
+        // Show user-friendly error message
+        console.error('Transcription error:', result.error);
       }
     } catch (error) {
       console.error('❌ Transcription error:', error);
       setTranscription(null);
+      // Log the full error for debugging
+      console.error('Full transcription error details:', {
+        message: error.message,
+        stack: error.stack,
+        voiceUrl: voiceUrl ? voiceUrl.substring(0, 100) + '...' : 'null'
+      });
     } finally {
       setIsTranscribing(false);
     }
