@@ -57,15 +57,20 @@ export default function ChatsScreen() {
             dbLastMessage
           );
           
+          // Use the display name and other_user from database service
+          let displayName = conversation?.name || 'Direct Chat';
+          let otherUser = conversation?.other_user || null;
+          
           return {
             id: item.conversation_id,
-            name: conversation?.name || 'Direct Chat',
+            name: displayName,
             type: conversation?.type || 'direct',
             created_at: conversation?.created_at,
             lastMessage: preview.previewText,
             lastMessageTime: preview.lastMessageTime,
             lastMessageTimestamp: preview.lastMessageTimestamp,
-            unreadCount: 0 // TODO: Calculate unread count
+            unreadCount: 0, // TODO: Calculate unread count
+            otherUser: otherUser // Store for potential status indicator
           };
         })
       );
@@ -352,11 +357,16 @@ export default function ChatsScreen() {
       });
     }}>
       <Card.Content style={styles.conversationContent}>
-        <Avatar.Text 
-          size={48} 
-          label={item.name?.charAt(0) || '?'} 
-          style={styles.avatar}
-        />
+        <View style={styles.avatarContainer}>
+          <Avatar.Text 
+            size={48} 
+            label={item.name?.charAt(0) || '?'} 
+            style={styles.avatar}
+          />
+          {item.type === 'direct' && (
+            <View style={[styles.statusIndicator, styles.statusOffline]} />
+          )}
+        </View>
         <View style={styles.conversationInfo}>
           <Title style={styles.conversationTitle}>{item.name || 'New Chat'}</Title>
           <Paragraph style={styles.lastMessage} numberOfLines={1}>
@@ -438,8 +448,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
   },
+  avatarContainer: {
+    position: 'relative',
+  },
   avatar: {
     backgroundColor: '#8B5CF6',
+  },
+  statusIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  statusOnline: {
+    backgroundColor: '#10B981',
+  },
+  statusOffline: {
+    backgroundColor: '#9CA3AF',
   },
   conversationInfo: {
     flex: 1,

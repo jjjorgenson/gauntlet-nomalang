@@ -18,10 +18,44 @@ class StorageService {
   static async saveMessages(conversationId, messages) {
     try {
       const key = `${this.MESSAGES_PREFIX}${conversationId}`;
-      await AsyncStorage.setItem(key, JSON.stringify(messages));
-      console.log(`💾 Saved ${messages.length} messages for conversation ${conversationId}`);
+      // Sort messages newest-first before saving
+      const sortedMessages = [...messages].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      await AsyncStorage.setItem(key, JSON.stringify(sortedMessages));
+      console.log(`💾 Saved ${messages.length} messages for conversation ${conversationId} (newest-first)`);
     } catch (error) {
       console.error('Error saving messages to storage:', error);
+    }
+  }
+
+  /**
+   * Migrate old cache format (oldest-first) to new format (newest-first)
+   * @param {string} conversationId - The conversation ID
+   */
+  static async migrateCacheFormat(conversationId) {
+    try {
+      const key = `${this.MESSAGES_PREFIX}${conversationId}`;
+      const cached = await AsyncStorage.getItem(key);
+      if (cached) {
+        const messages = JSON.parse(cached);
+
+        // Check if already in newest-first format (first message is newer than last)
+        if (messages.length > 1) {
+          const firstTime = new Date(messages[0]?.created_at);
+          const lastTime = new Date(messages[messages.length - 1]?.created_at);
+
+          // If first message is older than last, it's in old format (oldest-first)
+          if (firstTime < lastTime) {
+            console.log(`🔄 Migrating cache format for conversation ${conversationId} from oldest-first to newest-first`);
+            const sortedMessages = [...messages].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            await AsyncStorage.setItem(key, JSON.stringify(sortedMessages));
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Error migrating cache format:', error);
+      return false;
     }
   }
 
@@ -55,9 +89,9 @@ class StorageService {
     try {
       const key = `${this.MESSAGES_PREFIX}${conversationId}`;
       const existing = await this.getMessages(conversationId) || [];
-      
-      // Add new message and keep only last 50
-      const updated = [...existing, message].slice(-50);
+
+      // Add new message at beginning (newest first) and keep only last 50
+      const updated = [message, ...existing].slice(0, 50);
       await AsyncStorage.setItem(key, JSON.stringify(updated));
       console.log(`➕ Added message to cache for conversation ${conversationId}`);
     } catch (error) {

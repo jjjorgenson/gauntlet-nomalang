@@ -46,25 +46,44 @@ export class DatabaseService {
     });
   }
 
-  static async searchUsers(query) {
-    const { data, error } = await supabase
+  static async searchUsers(query = '') {
+    const trimmedQuery = query.trim();
+    
+    let queryBuilder = supabase
       .from('users')
-      .select('id, username, email, native_language')
-      .or(`username.ilike.%${query}%,email.ilike.%${query}%`)
-      .limit(20);
+      .select('id, username, email, native_language');
+    
+    if (trimmedQuery) {
+      queryBuilder = queryBuilder.or(`username.ilike.%${trimmedQuery}%,email.ilike.%${trimmedQuery}%`);
+    }
+    
+    const { data, error } = await queryBuilder.limit(20);
     
     return { data, error };
   }
 
   // Conversation operations
   static async createConversation(conversationData) {
-    const { data, error } = await supabase
-      .from('conversations')
-      .insert(conversationData)
-      .select()
-      .single();
+    const { data, error } = await supabase.rpc('create_conversation_with_participants', {
+      p_type: conversationData.type,
+      p_name: conversationData.name,
+      p_participant_ids: conversationData.participantIds || []
+    });
     
-    return { data, error };
+    if (error) {
+      console.error('Error creating conversation:', error);
+      return { data: null, error };
+    }
+    
+    return { 
+      data: { 
+        id: data.conversation_id,
+        type: conversationData.type,
+        name: conversationData.name,
+        existing: data.existing
+      }, 
+      error: null 
+    };
   }
 
   static async addParticipantToConversation(conversationId, userId, participantData = {}) {
@@ -76,11 +95,13 @@ export class DatabaseService {
       });
       
       if (error) {
+        console.error('Error adding participant:', error);
         return { data: null, error };
       }
       
       return { data: { conversation_id: conversationId, user_id: userId }, error: null };
     } catch (error) {
+      console.error('DatabaseService.addParticipantToConversation error:', error);
       return { data: null, error };
     }
   }
@@ -148,37 +169,49 @@ export class DatabaseService {
           .limit(1)
           .maybeSingle();
         
-        if (item.conversations.type === 'direct') {
-          // Get the other participant's name for direct conversations
-          const { data: participants } = await supabase
-            .from('conversation_participants')
-            .select(`
-              users (
-                id,
-                username,
-                avatar_url
-              )
-            `)
-            .eq('conversation_id', item.conversation_id)
-            .neq('user_id', userId);
-          
-          if (participants && participants.length > 0) {
-            return {
-              ...item,
-              conversations: {
-                ...item.conversations,
-                name: participants[0].users.username, // Use other participant's name
-                other_user: participants[0].users,
-                lastMessage
-              }
-            };
+        const conversation = item.conversations;
+        
+        // Get ALL participants for this conversation (including self)
+        const { data: allParticipants } = await supabase
+          .from('conversation_participants')
+          .select(`
+            user_id,
+            users!inner (
+              id,
+              username,
+              avatar_url
+            )
+          `)
+          .eq('conversation_id', item.conversation_id);
+        
+        // Filter to get OTHER participants (not current user)
+        const otherParticipants = allParticipants?.filter(p => p.user_id !== userId) || [];
+        
+        // Determine display name based on conversation type
+        let displayName = conversation.name;
+        let otherUser = null;
+        
+        if (conversation.type === 'direct') {
+          // Direct chat: use other participant's username
+          if (otherParticipants.length > 0) {
+            otherUser = otherParticipants[0].users;
+            displayName = otherUser.username;
+          } else {
+            // Fallback if no other participant found
+            displayName = 'Direct Chat';
           }
+        } else if (!displayName) {
+          // Group without name
+          displayName = 'Group Chat';
         }
         
         return {
           ...item,
           conversations: {
-            ...item.conversations,
+            ...conversation,
+            name: displayName,
+            other_user: otherUser,
+            participants: allParticipants,
             lastMessage
           }
         };
@@ -279,9 +312,9 @@ export class DatabaseService {
         )
       `)
       .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })  // Changed to ascending for newest at bottom
+      .order('created_at', { ascending: true })  // Keep oldest first for server pagination
       .range(offset, offset + limit - 1);
-    
+
     return { data, error };
   }
 
@@ -404,17 +437,6 @@ export class DatabaseService {
         typing: false
       });
     }
-  }
-
-  // Utility functions
-  static async searchUsers(query) {
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, username, avatar_url, native_language')
-      .ilike('username', `%${query}%`)
-      .limit(10);
-    
-    return { data, error };
   }
 
   static async createDirectConversation(userId1, userId2) {

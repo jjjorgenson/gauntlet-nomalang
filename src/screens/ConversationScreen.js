@@ -26,6 +26,9 @@ export default function ConversationScreen() {
   const [offset, setOffset] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const [isLoadingFresh, setIsLoadingFresh] = useState(false);
+  const [lastContentHeight, setLastContentHeight] = useState(0);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
   
   // Translation settings - get from user profile
   const [userLanguage, setUserLanguage] = useState(user?.user_metadata?.native_language || 'en');
@@ -62,11 +65,14 @@ export default function ConversationScreen() {
   const typingSubscription = useRef(null);
   const flatListRef = useRef(null);
   const shouldScrollToBottom = useRef(true);
+  const hasScrolledToBottom = useRef(false);
 
   useEffect(() => {
     if (!conversationId || !user) return;
 
     // Reset scroll flag for new conversation
+    setLastContentHeight(0);
+    setShouldAutoScroll(false); // Reset auto-scroll flag
     shouldScrollToBottom.current = true;
     // console.log('🔄 New conversation loaded, should scroll to bottom');
     
@@ -93,40 +99,34 @@ export default function ConversationScreen() {
     }
   }, [isOnline, queue.length, flushQueue]);
   
-  // Auto-scroll when messages are loaded - more robust approach
-  useEffect(() => {
-    if (shouldScrollToBottom.current && messages.length > 0 && !loading) {
-      // console.log(`🔄 Messages loaded (${messages.length}), attempting scroll to bottom`);
-      
-      // Use multiple attempts with increasing delays
-      const attemptScroll = (attempt = 1) => {
-        if (flatListRef.current && shouldScrollToBottom.current) {
-          flatListRef.current.scrollToEnd({ animated: false });
-          // console.log(`✅ Scroll attempt ${attempt} completed`);
-          
-          // If this is the first attempt, try again after a longer delay
-          if (attempt === 1) {
-            setTimeout(() => attemptScroll(2), 300);
-          } else {
-            shouldScrollToBottom.current = false;
-          }
-        }
-      };
-      
-      // Start with immediate attempt, then delayed attempts
-      attemptScroll();
-    }
-  }, [messages.length, loading]);
+  // Auto-scroll when messages are loaded - DISABLED to prevent bouncing
+  // Since we load newest messages first, they're already at bottom
+  // useEffect(() => {
+  //   if (shouldScrollToBottom.current && messages.length > 0 && !loading && !isLoadingFresh) {
+  //     setTimeout(() => {
+  //       if (flatListRef.current && shouldScrollToBottom.current) {
+  //         flatListRef.current.scrollToEnd({ animated: false });
+  //         shouldScrollToBottom.current = false;
+  //       }
+  //     }, 300);
+  //   }
+  // }, [messages.length, loading, isLoadingFresh]);
   
-  // Force scroll to bottom function with multiple methods
+  // Reset scroll flag when conversation changes
+  useEffect(() => {
+    hasScrolledToBottom.current = false;
+  }, [conversationId]);
+  
+  // Initial scroll removed - with inverted FlatList, newest messages are already at bottom
+  // No scroll needed - user starts at correct position naturally
+  
+  // Force scroll to bottom function
   const forceScrollToBottom = () => {
     if (flatListRef.current && messages.length > 0) {
-      // console.log('🔄 Force scrolling to bottom');
-      
-      // Try scrollToEnd first
+      // Normal FlatList: scrollToEnd shows newest messages at bottom
       flatListRef.current.scrollToEnd({ animated: false });
       
-      // Also try scrollToIndex as fallback
+      // Fallback with scrollToIndex
       setTimeout(() => {
         if (flatListRef.current) {
           try {
@@ -135,10 +135,8 @@ export default function ConversationScreen() {
               animated: false,
               viewPosition: 1 // 1 = bottom of viewport
             });
-            // console.log('✅ Used scrollToIndex as fallback');
           } catch (error) {
-            // console.log('⚠️ scrollToIndex failed, using scrollToEnd');
-            flatListRef.current.scrollToEnd({ animated: false });
+            // scrollToIndex failed
           }
         }
       }, 100);
@@ -148,17 +146,15 @@ export default function ConversationScreen() {
   // Smart scroll to bottom - only if user is near bottom
   const scrollToBottomIfNear = (animated = true) => {
     if (isNearBottom && flatListRef.current) {
-      // console.log('📜 User near bottom, auto-scrolling');
+      // Normal FlatList: scrollToEnd shows newest messages at bottom
       flatListRef.current.scrollToEnd({ animated });
-    } else {
-      // console.log('📜 User scrolled up, not auto-scrolling');
     }
   };
   
   // Force scroll regardless of position (for sending own messages)
   const scrollToBottomForce = (animated = true) => {
     if (flatListRef.current) {
-      // console.log('📜 Force scrolling to bottom');
+      // Normal FlatList: scrollToEnd shows newest messages at bottom
       flatListRef.current.scrollToEnd({ animated });
     }
   };
@@ -170,92 +166,163 @@ export default function ConversationScreen() {
     scrollPositionRef.current = contentOffset.y;
     contentHeightRef.current = contentSize.height;
     
-    // Consider "near bottom" if within 100px of the bottom
+    // Normal FlatList: "near bottom" means near actual bottom
     const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    const wasNearBottom = isNearBottom;
     setIsNearBottom(distanceFromBottom < 100);
     
-    // Existing load more logic
+    // Log scroll position changes
+    if (wasNearBottom !== (distanceFromBottom < 100)) {
+      console.log(`📱 DEBUG: Scroll position changed - isNearBottom: ${distanceFromBottom < 100}, distanceFromBottom: ${distanceFromBottom}`);
+    }
+    
+    // Load more when scrolling up (towards top/older messages)
     if (contentOffset.y < 100 && !loadingMore && messages.length > 0) {
       loadMoreMessages();
     }
   };
   
-  // Handle content size change for reliable auto-scroll
-  const handleContentSizeChange = () => {
-    if (shouldScrollToBottom.current && flatListRef.current) {
-      // console.log('🔄 onContentSizeChange triggered, scrolling to bottom');
-      
-      // Use multiple attempts with different delays
-      const scrollAttempts = [50, 150, 300, 500];
-      
-      scrollAttempts.forEach((delay, index) => {
-        setTimeout(() => {
-          if (flatListRef.current && shouldScrollToBottom.current) {
-            flatListRef.current.scrollToEnd({ animated: false });
-            // console.log(`✅ Scroll attempt ${index + 1} (${delay}ms delay)`);
-            
-            // Only reset flag on the last attempt
-            if (index === scrollAttempts.length - 1) {
-              shouldScrollToBottom.current = false;
-            }
-          }
-        }, delay);
-      });
+  // Handle content size change - minimal logging
+  const handleContentSizeChange = (contentWidth, contentHeight) => {
+    // Minimal logging - just track when content changes
+    if (contentHeight > lastContentHeight + 100) {
+      console.log(`📱 DEBUG: Content growing - height: ${contentHeight}`);
     }
+    setLastContentHeight(contentHeight);
   };
 
   const loadMessages = async () => {
     try {
       setLoading(true);
       
-      // 1. Load from cache immediately (instant display)
-      const cachedMessages = await StorageService.getMessages(conversationId);
-      if (cachedMessages && cachedMessages.length > 0) {
-        const formattedCached = formatMessages(cachedMessages);
-        setMessages(formattedCached);
-        setLoading(false); // Show cached immediately
-        console.log(`📱 Loaded ${cachedMessages.length} cached messages`);
-      }
-      
-      // 2. Fetch latest from server
-      const { data, error } = await messagingService.current.getMessages(conversationId, 50);
-      
-      if (error) {
-        console.error('Error loading messages:', error);
-        return;
+      // 1. Load newest messages from cache first (first 3 messages for instant display)
+      const allCachedMessages = await StorageService.getMessages(conversationId);
+
+      // Migrate old cache format if needed
+      if (allCachedMessages && allCachedMessages.length > 0) {
+        await StorageService.migrateCacheFormat(conversationId);
+        // Re-fetch after migration
+        const migratedMessages = await StorageService.getMessages(conversationId);
+        if (migratedMessages) {
+          allCachedMessages.splice(0, allCachedMessages.length, ...migratedMessages);
+        }
       }
 
-      if (data) {
-        // Save to cache and update UI
-        await StorageService.saveMessages(conversationId, data);
-        const formattedMessages = formatMessages(data);
-        setMessages(formattedMessages);
-        console.log(`🔄 Updated with ${data.length} fresh messages from server`);
+      if (allCachedMessages && allCachedMessages.length > 0) {
+        // Take the newest 3 messages for instant display (cache is newest-first)
+        const newestCached = allCachedMessages.slice(0, 3); // Get first 3 (newest from cache)
         
-        // Mark messages as read
-        await markMessagesAsRead(data);
+        console.log(`🔍 CACHE DEBUG: Raw cache order (first 3):`);
+        newestCached.slice(0, 3).forEach((msg, i) => {
+          console.log(`  [${i}] ${msg.created_at} - ${msg.content?.substring(0, 30)}...`);
+        });
+        
+        const formattedCached = formatMessages(newestCached, false); // Don't sort - keep newest-first order
+        
+        console.log(`🔍 FORMAT DEBUG: After formatMessages (first 3):`);
+        formattedCached.slice(0, 3).forEach((msg, i) => {
+          console.log(`  [${i}] ${msg.timestamp} - ${msg.content?.substring(0, 30)}...`);
+        });
+        
+        // Reverse to put newest at bottom (normal chat behavior) - reverse only the slice we're displaying
+        const reversedCached = formattedCached.slice().reverse(); // Create copy and reverse only this slice
+        
+        console.log(`🔍 REVERSE DEBUG: After reverse (first 3):`);
+        reversedCached.slice(0, 3).forEach((msg, i) => {
+          console.log(`  [${i}] ${msg.timestamp} - ${msg.content?.substring(0, 30)}...`);
+        });
+        
+        console.log(`🔍 UI DEBUG: Setting ${reversedCached.length} messages for display`);
+        console.log(`🔍 UI DEBUG: First message (top): ${reversedCached[0]?.timestamp} - ${reversedCached[0]?.content?.substring(0, 30)}...`);
+        console.log(`🔍 UI DEBUG: Last message (bottom): ${reversedCached[reversedCached.length - 1]?.timestamp} - ${reversedCached[reversedCached.length - 1]?.content?.substring(0, 30)}...`);
+        
+        setMessages(reversedCached);
+        setLoading(false); // Show newest messages immediately
+        setShouldAutoScroll(true); // Flag for onLayout to scroll
+        
+        // Load remaining messages in background
+        setTimeout(() => {
+          const remainingMessages = allCachedMessages.slice(3); // All except the newest 3
+          if (remainingMessages.length > 0) {
+            const formattedRemaining = formatMessages(remainingMessages, true); // Sort oldest-first for display
+            console.log(`🔍 BACKGROUND DEBUG: Loading ${formattedRemaining.length} older messages`);
+            setMessages(prev => [...formattedRemaining, ...prev]); // Prepend older messages (they go above newest)
+            
+            // Scroll back to bottom after loading older messages
+            setTimeout(() => {
+              if (flatListRef.current) {
+                console.log(`🔍 BACKGROUND DEBUG: Scrolling back to bottom after loading older messages`);
+                flatListRef.current.scrollToEnd({ animated: false });
+              }
+            }, 200); // Wait for messages to render
+          }
+        }, 100); // Small delay to let newest messages render first
       }
+      
+      // 2. Fetch latest from server (only if we have cached messages)
+      if (allCachedMessages && allCachedMessages.length > 0) {
+        setIsLoadingFresh(true);
+        const { data, error } = await messagingService.current.getMessages(conversationId, 50);
+        
+        if (error) {
+          console.error('Error loading messages:', error);
+          return;
+        }
+
+        if (data) {
+          // Check if we have newer messages than cache
+          const newestCachedTime = allCachedMessages[0]?.created_at;
+          const newestServerTime = data[data.length - 1]?.created_at; // Last item is newest in server response
+
+          if (newestServerTime > newestCachedTime) {
+            // Save updated messages to cache (server gives oldest-first, cache needs newest-first)
+            await StorageService.saveMessages(conversationId, data);
+            const formattedMessages = formatMessages(data); // Sort to newest-first for display and update cache
+            setMessages(formattedMessages);
+            console.log(`🔄 Updated with ${data.length} fresh messages from server`);
+
+            // Only scroll if user is already near bottom (new messages arrived)
+            if (isNearBottom) {
+              shouldScrollToBottom.current = true;
+              // Trigger scroll after a short delay to ensure messages are rendered
+              setTimeout(() => {
+                if (flatListRef.current && shouldScrollToBottom.current) {
+                  // Normal FlatList: scrollToEnd shows newest messages at bottom
+                  flatListRef.current.scrollToEnd({ animated: false });
+                  shouldScrollToBottom.current = false;
+                }
+              }, 100);
+            }
+          } else {
+            console.log(`📱 Cache is up to date, no server update needed`);
+          }
+        }
+        setIsLoadingFresh(false);
+      } else {
+        // No cache - load from server normally
+        const { data, error } = await messagingService.current.getMessages(conversationId, 50);
+        
+        if (error) {
+          console.error('Error loading messages:', error);
+          return;
+        }
+
+        if (data) {
+          await StorageService.saveMessages(conversationId, data);
+          const formattedMessages = formatMessages(data); // Sort to newest-first for display
+          setMessages(formattedMessages);
+          console.log(`📱 Loaded ${data.length} messages from server (no cache)`);
+        }
+        setLoading(false);
+      }
+      
     } catch (error) {
       console.error('Error loading messages:', error);
     } finally {
-    setLoading(false);
+      setLoading(false);
+      setIsLoadingFresh(false);
       
-      // Final fallback scroll attempt - more aggressive
-      setTimeout(() => {
-        if (shouldScrollToBottom.current) {
-          // console.log('🔄 Final fallback scroll attempt');
-          forceScrollToBottom();
-          
-          // Try again after another delay
-          setTimeout(() => {
-            if (shouldScrollToBottom.current) {
-              console.log('🔄 Second final fallback attempt');
-              forceScrollToBottom();
-              shouldScrollToBottom.current = false;
-            }
-          }, 500);
-        }
-      }, 1000);
+      // Fallback scroll removed - newest messages already at bottom
     }
   };
   
@@ -276,8 +343,8 @@ export default function ConversationScreen() {
     }
   };
   
-  const formatMessages = (messages) => {
-    return messages.map(msg => ({
+  const formatMessages = (messages, shouldSort = true) => {
+    const formatted = messages.map(msg => ({
       id: msg.id,
       content: msg.content,
       senderId: msg.sender_id,
@@ -290,7 +357,10 @@ export default function ConversationScreen() {
       detectedLanguage: msg.detected_language,
       isEdited: msg.is_edited,
       editedAt: msg.edited_at ? new Date(msg.edited_at) : null
-    })).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)); // Sort oldest first
+    }));
+    
+    // Sort oldest-first (ascending) for normal chat display - newest at bottom
+    return shouldSort ? formatted.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)) : formatted;
   };
 
   const setupRealTimeSubscriptions = () => {
@@ -350,8 +420,8 @@ export default function ConversationScreen() {
               }
               
               // console.log('🔴 Adding new message to state');
-              
-              return [...prev, formattedMessage];
+
+              return [...prev, formattedMessage]; // Append new message (newest at bottom)
             });
             
             // Smart scroll for incoming messages (only if near bottom)
@@ -416,7 +486,7 @@ export default function ConversationScreen() {
     // 1. Save to local storage immediately
     await StorageService.addMessage(conversationId, tempMessage);
     const formattedTemp = formatMessages([tempMessage])[0];
-    setMessages(prev => [...prev, formattedTemp]);
+    setMessages(prev => [...prev, formattedTemp]); // Append temp message (newest at bottom)
     setNewMessage('');
     
     // 2. Scroll to bottom after adding own message (ALWAYS, with animation)
@@ -460,9 +530,9 @@ export default function ConversationScreen() {
       if (data) {
         await StorageService.removeMessage(conversationId, tempId);
         await StorageService.addMessage(conversationId, data);
-        
+
         const realMessage = formatMessages([data])[0];
-        setMessages(prev => prev.map(msg => 
+        setMessages(prev => prev.map(msg =>
           msg.id === tempId ? realMessage : msg
         ));
         console.log('✅ Message sent and cached successfully');
@@ -517,7 +587,7 @@ export default function ConversationScreen() {
       // Add to local storage and UI immediately
       await StorageService.addMessage(conversationId, tempMessage);
       const formattedTemp = formatMessages([tempMessage])[0];
-      setMessages(prev => [...prev, formattedTemp]);
+      setMessages(prev => [formattedTemp, ...prev]); // Prepend temp message (newest first)
 
       // Scroll to bottom after adding voice message
       setTimeout(() => {
@@ -559,9 +629,9 @@ export default function ConversationScreen() {
       if (data) {
         await StorageService.removeMessage(conversationId, tempId);
         await StorageService.addMessage(conversationId, data);
-        
+
         const realMessage = formatMessages([data])[0];
-        setMessages(prev => prev.map(msg => 
+        setMessages(prev => prev.map(msg =>
           msg.id === tempId ? realMessage : msg
         ));
         console.log('✅ Voice message sent and cached successfully');
@@ -606,6 +676,31 @@ export default function ConversationScreen() {
     
     try {
       setLoadingMore(true);
+      
+      // First try to load older messages from cache
+      const allCachedMessages = await StorageService.getMessages(conversationId);
+
+      // Migrate old cache format if needed
+      if (allCachedMessages && allCachedMessages.length > 0) {
+        await StorageService.migrateCacheFormat(conversationId);
+        const migratedMessages = await StorageService.getMessages(conversationId);
+        if (migratedMessages) {
+          allCachedMessages.splice(0, allCachedMessages.length, ...migratedMessages);
+        }
+      }
+
+      if (allCachedMessages && allCachedMessages.length > messages.length) {
+        // Load more messages from cache (older ones) - cache is newest-first, so older are at the end
+        const olderMessages = allCachedMessages.slice(messages.length);
+        const formattedOlder = formatMessages(olderMessages);
+
+        // Append older messages to current messages (they go below)
+        setMessages(prevMessages => [...prevMessages, ...formattedOlder]);
+        console.log(`📱 Loaded ${olderMessages.length} older messages from cache`);
+        return;
+      }
+      
+      // No more cached messages, load from server
       const newOffset = offset + 50;
       const { data, error } = await messagingService.current.getMessages(conversationId, 50, newOffset);
       
@@ -617,16 +712,25 @@ export default function ConversationScreen() {
       if (data && data.length > 0) {
         // Get existing messages from cache
         const existingMessages = await StorageService.getMessages(conversationId) || [];
-        
-        // Prepend older messages to existing cache (they should be older)
+
+        // Migrate cache format if needed before updating
+        if (existingMessages.length > 0) {
+          await StorageService.migrateCacheFormat(conversationId);
+          const migratedMessages = await StorageService.getMessages(conversationId);
+          if (migratedMessages) {
+            existingMessages.splice(0, existingMessages.length, ...migratedMessages);
+          }
+        }
+
+        // Prepend older messages to existing cache (server gives oldest-first, cache is newest-first)
         const updatedMessages = [...data, ...existingMessages];
         await StorageService.saveMessages(conversationId, updatedMessages);
-        
-        // Format and prepend to current messages (older messages go at the beginning)
+
+        // Format and prepend to current messages (older messages go at the top)
         const formattedMessages = formatMessages(data);
         setMessages(prev => [...formattedMessages, ...prev]);
         setOffset(newOffset);
-        console.log(`📜 Loaded ${data.length} older messages`);
+        console.log(`📜 Loaded ${data.length} older messages from server`);
       } else {
         // No more messages to load
         console.log('📜 No more messages to load');
@@ -778,8 +882,18 @@ export default function ConversationScreen() {
     return (
       <View style={styles.loadingMoreContainer}>
         <Text style={styles.loadingMoreText}>Loading older messages...</Text>
-    </View>
-  );
+      </View>
+    );
+  };
+
+  const renderLoadingFresh = () => {
+    if (!isLoadingFresh) return null;
+    
+    return (
+      <View style={styles.loadingFreshContainer}>
+        <Text style={styles.loadingFreshText}>Loading newer messages...</Text>
+      </View>
+    );
   };
 
   if (loading) {
@@ -812,6 +926,7 @@ export default function ConversationScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+      {renderLoadingFresh()}
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -823,6 +938,20 @@ export default function ConversationScreen() {
         scrollEventThrottle={400}
         ListHeaderComponent={renderLoadingMore}
         ListFooterComponent={renderTypingIndicator}
+        onLayout={() => {
+          if (shouldAutoScroll && flatListRef.current && messages.length > 0) {
+            console.log(`🔍 SCROLL DEBUG: onLayout triggered - scrolling to bottom`);
+            console.log(`🔍 SCROLL DEBUG: Messages count: ${messages.length}`);
+            console.log(`🔍 SCROLL DEBUG: First message: ${messages[0]?.timestamp} - ${messages[0]?.content?.substring(0, 30)}...`);
+            console.log(`🔍 SCROLL DEBUG: Last message: ${messages[messages.length - 1]?.timestamp} - ${messages[messages.length - 1]?.content?.substring(0, 30)}...`);
+            // Add small delay to ensure content is fully rendered before scrolling
+            setTimeout(() => {
+              flatListRef.current.scrollToEnd({ animated: false });
+              setShouldAutoScroll(false);
+              console.log(`🔍 SCROLL DEBUG: Scroll completed`);
+            }, 50);
+          }
+        }}
       />
 
       <View style={styles.inputContainer}>
@@ -867,7 +996,7 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     padding: 16,
-    paddingBottom: 8,
+    paddingBottom: 80, // Extra buffer for timestamp and delivery status
   },
   messageContainer: {
     marginBottom: 12,
@@ -1043,6 +1172,19 @@ const styles = StyleSheet.create({
   },
   loadingMoreText: {
     color: '#6B7280',
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  loadingFreshContainer: {
+    padding: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    backgroundColor: '#F0F9FF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0F2FE',
+  },
+  loadingFreshText: {
+    color: '#0369A1',
     fontSize: 12,
     fontStyle: 'italic',
   },

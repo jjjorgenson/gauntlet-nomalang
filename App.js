@@ -12,6 +12,7 @@ import ChatsScreen from './src/screens/ChatsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import AuthScreen from './src/screens/AuthScreen';
 import ConversationScreen from './src/screens/ConversationScreen';
+import './src/lib/supabase';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();

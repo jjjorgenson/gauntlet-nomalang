@@ -4,18 +4,19 @@ import { Text, Card, Button, ActivityIndicator, IconButton } from 'react-native-
 import TranslationService from '../services/translation';
 import LanguageService from '../services/language';
 import SlangService from '../services/slang';
+import DatabaseService from '../services/database';
 import SlangExplanationModal from './SlangExplanationModal';
 
-export default function TranslatedMessage({ 
+function TranslatedMessage({ 
   message, 
   userLanguage, 
   autoTranslateEnabled, 
   onTranslationComplete 
 }) {
-  const [translation, setTranslation] = useState(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
   const [translationError, setTranslationError] = useState(null);
+  const [translation, setTranslation] = useState(null);
   
   // Slang detection state
   const [showSlangModal, setShowSlangModal] = useState(false);
@@ -26,30 +27,67 @@ export default function TranslatedMessage({
   // Animation state
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Detect message language on mount
-  const languageDetection = TranslationService.detectLanguage(message.content);
-  const messageLanguage = LanguageService.toISO6391(languageDetection.language);
-  const languageConfidence = languageDetection.confidence;
-  
-  // Debug logging
-  console.log('🔍 TranslatedMessage - Message:', message.content);
-  console.log('🔍 TranslatedMessage - Language Detection:', languageDetection);
-  console.log('🔍 TranslatedMessage - Message Language (normalized):', messageLanguage);
-  console.log('🔍 TranslatedMessage - User Language:', userLanguage);
-  console.log('🔍 TranslatedMessage - Confidence:', languageConfidence);
-  
-  // Check if translation is needed
-  const needsTranslation = TranslationService.needsTranslation(
-    messageLanguage, 
-    userLanguage
-  );
+  // State for language detection
+  const [messageLanguage, setMessageLanguage] = useState(null);
+  const [needsTranslation, setNeedsTranslation] = useState(false);
+  const [languageConfidence, setLanguageConfidence] = useState(0);
 
-  // Auto-translate if enabled and needed
+  // Detect message language once on mount
   useEffect(() => {
-    if (needsTranslation && autoTranslateEnabled && !translation) {
-      handleTranslate();
-    }
-  }, [needsTranslation, autoTranslateEnabled, translation]);
+    const detectLanguage = () => {
+      const languageDetection = TranslationService.detectLanguage(message.content);
+      const detectedLanguage = LanguageService.toISO6391(languageDetection.language);
+      const translationNeeded = TranslationService.needsTranslation(detectedLanguage, userLanguage);
+      
+      setMessageLanguage(detectedLanguage);
+      setNeedsTranslation(translationNeeded);
+      setLanguageConfidence(languageDetection.confidence);
+      
+      console.log('🔍 TranslatedMessage initialized:', {
+        messageLanguage: detectedLanguage,
+        userLanguage,
+        needsTranslation: translationNeeded,
+        messageId: message.id
+      });
+    };
+    
+    detectLanguage();
+  }, [message.content, userLanguage, message.id]);
+
+  // Check database for existing translation
+  useEffect(() => {
+    const checkExistingTranslation = async () => {
+      if (needsTranslation && !translation && message.id) {
+        try {
+          // Check database first
+          const { data } = await DatabaseService.getTranslation(
+            message.id, 
+            userLanguage
+          );
+          
+          if (data?.translated_content) {
+            console.log('✅ Found existing translation in database');
+            setTranslation({
+              translatedText: data.translated_content,
+              isMock: false,
+              fromCache: true
+            });
+          } else if (autoTranslateEnabled) {
+            // Only call API if not in database
+            console.log('🔄 No existing translation, calling API');
+            handleTranslate();
+          }
+        } catch (error) {
+          console.error('Error checking existing translation:', error);
+          if (autoTranslateEnabled) {
+            handleTranslate();
+          }
+        }
+      }
+    };
+    
+    checkExistingTranslation();
+  }, [message.id, needsTranslation, autoTranslateEnabled, userLanguage]);
 
   // Animate translation when it appears
   useEffect(() => {
@@ -77,6 +115,21 @@ export default function TranslatedMessage({
       
       setTranslation(result);
       setShowTranslation(true);
+      
+      // Save to database for future use
+      if (message.id && result.translatedText) {
+        try {
+          await DatabaseService.saveTranslation(
+            message.id,
+            userLanguage,
+            result.translatedText
+          );
+          console.log('✅ Translation saved to database');
+        } catch (dbError) {
+          console.error('Error saving translation to database:', dbError);
+          // Don't fail the translation if database save fails
+        }
+      }
       
       // Notify parent component
       if (onTranslationComplete) {
@@ -397,4 +450,16 @@ const styles = StyleSheet.create({
     padding: 0,
     marginLeft: 4,
   },
+});
+
+// Memoize component to prevent unnecessary re-renders
+export default React.memo(TranslatedMessage, (prevProps, nextProps) => {
+  // Only re-render if essential props change
+  return (
+    prevProps.message.id === nextProps.message.id &&
+    prevProps.userLanguage === nextProps.userLanguage &&
+    prevProps.autoTranslateEnabled === nextProps.autoTranslateEnabled &&
+    prevProps.message.content === nextProps.message.content &&
+    prevProps.message.isOwn === nextProps.message.isOwn
+  );
 });

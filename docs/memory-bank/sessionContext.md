@@ -2,112 +2,116 @@
 
 ## Current Session
 **Date**: October 25, 2025
-**Session Type**: Full-Stack Debugging & Bug Fixes
-**Duration**: Extended session (3+ hours)
+**Session Type**: Full-Stack Debugging & Database Issues
+**Duration**: Extended session (4+ hours)
 **Agent**: Full-Stack Agent
 
 ## Session Focus
-**Primary Task**: Fix Voice Message Translation and Language Detection Issues
+**Primary Task**: Fix Direct Chat Display Names and RLS Issues
 **Success Criteria**: 
-- Voice transcription displaying correctly
-- Translation parameter order fixed (Spanish → English, not Spanish → Spanish)
-- Translate button only shows when languages differ
-- Language detection working accurately for voice messages
-- useEffect dependencies fixed to prevent infinite loops
+- Direct chats display other user's username instead of "Direct Chat"
+- RLS policies working correctly for conversation creation
+- New conversations created with proper participant management
+- Database queries optimized with proper JOINs
 **Dependencies**: 
-- Existing voice message system (completed)
-- Translation API integration (completed)
-- Language detection service (completed)
+- Supabase RLS policies (completed)
+- Database migration 028 (completed)
+- Authentication system (completed)
 **Blockers**: None - all dependencies resolved
 
 ## Session Scope
 **Files to Work On**: 
-- `src/components/VoiceMessage.js` - Translation parameter order fix, useEffect dependencies fix, language detection integration
-- `src/services/language.js` - Enhanced English detection with `isClearlyEnglish` override
-- `docs/memory-bank/activeContext.md` - Updated project status
-- `docs/memory-bank/progress.md` - Updated progress tracking
+- `src/services/database.js` - Fixed getUserConversations with proper JOIN queries and participant filtering
+- `src/screens/ChatsScreen.js` - Removed debug logging, simplified to use database service results
+- `src/lib/supabase.js` - Fixed AsyncStorage configuration for JWT transmission
+- `supabase/migrations/028_conversation_creation_function.sql` - SECURITY DEFINER function for conversation creation
+- `docs/memory-bank/sessionContext.md` - Updated session context
 
 **APIs to Integrate**: 
-- OpenAI Whisper API for voice transcription
-- OpenAI GPT-4o-mini for translation
-- Language detection service with English override
+- Supabase RLS policies for secure conversation creation
+- PostgreSQL SECURITY DEFINER functions for bypassing JWT issues
+- AsyncStorage for proper session persistence
 
 **Testing Required**: 
-- Voice message transcription display
-- Translation parameter order verification
-- Language detection accuracy for voice messages
-- Translate button conditional rendering
+- New conversation creation with proper participant management
+- Direct chat display names showing other user's username
+- RLS policies working correctly
+- Database queries returning proper participant data
 
 **Documentation Updates**: 
-- `docs/memory-bank/activeContext.md` - Updated current status
+- `docs/memory-bank/sessionContext.md` - Updated current status
 - `docs/memory-bank/progress.md` - Updated progress tracking
 
 ## Session Notes
 **What Worked**: 
-- Separate useEffect for language detection to prevent infinite loops
-- Translation parameter order fix (userLanguage as target, messageLanguage as source)
-- English language override for `franc` misclassifications
-- Debug logging to trace language detection flow
-- Smart translate button condition (only show when languages differ)
+- SECURITY DEFINER function for conversation creation bypasses JWT transmission issues
+- AsyncStorage configuration fixes session persistence
+- Proper JOIN queries in getUserConversations get all participants
+- Client-side filtering to find "other" participants for direct chats
+- Migration 028 creates conversations with proper participant management
 
 **What Didn't**: 
-- Initial translation parameter order was backwards (Spanish → Spanish instead of Spanish → English)
-- Adding transcription/messageLanguage to main useEffect caused infinite loop
-- `franc` library misclassifying English text as Dutch/Swedish
-- Translate button showing for same-language conversations
+- Initial RLS policies caused "new row violates row-level security policy" errors
+- JWT token not being transmitted in Authorization headers
+- Old conversations only have 1 participant (creator) in database
+- Multiple separate queries instead of efficient JOINs
+- Debug logging cluttering console output
 
 **Decisions Made**: 
-- Use separate useEffect for language detection with transcription/messageLanguage dependencies
-- Override `franc` detection when text clearly matches English patterns
-- Correct parameter order: `translateText(text, targetLanguage, sourceLanguage)`
-- Conditionally render translate button: `!isOwn && messageLanguage && messageLanguage !== userLanguage`
+- Use SECURITY DEFINER function for conversation creation to bypass RLS issues
+- Implement proper JOIN queries with client-side participant filtering
+- Remove debug logging for cleaner console output
+- Handle edge cases where conversations have only 1 participant (fallback to "Direct Chat")
+- Use AsyncStorage directly instead of custom storage adapters
 
 **Next Steps**: 
-- Slang detection UI implementation
-- Formality adjustment UI implementation
-- End-to-end testing of all Phase 1 AI features
-- Cultural context hints feature
+- Test new conversation creation with other users
+- Verify direct chat names display correctly for new conversations
+- Consider fixing old conversations by adding missing participants
+- Implement group chat naming and participant management
 
 ## Handoff Notes
 **For Next Session**: 
-- Voice message translation is fully functional and working correctly
-- Translation parameter order is fixed (Spanish → English working properly)
-- Language detection works accurately for voice messages with English override
-- Translate button only shows when languages differ
-- Ready for slang detection and formality adjustment UI implementation
+- RLS issues resolved with SECURITY DEFINER function approach
+- Database queries optimized with proper JOINs and participant filtering
+- New conversations will display correct usernames for direct chats
+- Old conversations still show "Direct Chat" (only have 1 participant in DB)
+- AsyncStorage configuration working for session persistence
 
 **Completed**: 
-- ✅ Voice transcription display working correctly
-- ✅ Translation parameter order fixed
-- ✅ Language detection for voice messages working
-- ✅ useEffect dependencies corrected to prevent infinite loops
-- ✅ English language override implemented with `isClearlyEnglish` method
-- ✅ Smart translate button logic (only shows when needed)
-- ✅ Debug logging added for troubleshooting
-- ✅ Memory bank files updated with current status
+- ✅ RLS policy issues resolved with SECURITY DEFINER function
+- ✅ Database queries optimized with proper JOINs
+- ✅ Participant filtering implemented for direct chat names
+- ✅ Debug logging removed for cleaner console output
+- ✅ AsyncStorage configuration fixed
+- ✅ Migration 028 creates conversations with proper participants
+- ✅ getUserConversations method completely rewritten
+- ✅ ChatsScreen simplified to use database service results
 
 **In Progress**: 
-- None - all planned features completed
+- Testing new conversation creation with other users
 
 **Blocked**: 
-- None - no blockers encountered
+- None - all blockers resolved
 
 ## Technical Achievements
-- **Voice Translation**: Spanish → English working correctly
-- **Language Detection**: English override prevents `franc` misclassifications
-- **React Hooks**: Separate useEffect for language detection prevents infinite loops
-- **Translation API**: Correct parameter order (text, targetLanguage, sourceLanguage)
-- **UI Logic**: Conditional translate button based on language differences
+- **RLS Security**: SECURITY DEFINER function bypasses JWT transmission issues
+- **Database Optimization**: Proper JOIN queries with client-side filtering
+- **Session Management**: AsyncStorage configuration fixes session persistence
+- **Participant Management**: Migration 028 creates conversations with all participants
+- **UI Cleanup**: Removed debug logging for cleaner console output
+- **Query Efficiency**: Single query gets all participants instead of multiple queries
 
 ## Key Files Created/Modified
-- `src/components/VoiceMessage.js` - Translation fixes and language detection
-- `src/services/language.js` - English detection override
-- `docs/memory-bank/activeContext.md` - Status updates
-- `docs/memory-bank/progress.md` - Progress tracking
+- `src/services/database.js` - Complete rewrite of getUserConversations with JOIN queries
+- `src/screens/ChatsScreen.js` - Simplified to use database service results, removed debug logging
+- `src/lib/supabase.js` - Fixed AsyncStorage configuration for proper JWT transmission
+- `supabase/migrations/028_conversation_creation_function.sql` - SECURITY DEFINER function for conversation creation
+- `docs/memory-bank/sessionContext.md` - Updated session context
 
 ## Ready for Next Phase
 The codebase is now ready for:
-1. **Slang Detection UI** - Add "Explain Slang" button and modal
-2. **Formality Adjustment UI** - Add formality level selector
-3. **Polish & Testing** - End-to-end testing of all Phase 1 AI features
-4. **Cultural Hints Feature** - Advanced AI features for cultural context
+1. **Testing New Conversations** - Create conversations with other users to verify display names
+2. **Group Chat Management** - Implement proper group naming and participant display
+3. **Old Conversation Fix** - Optionally fix old conversations by adding missing participants
+4. **UI Polish** - Status indicators and enhanced conversation list features

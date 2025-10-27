@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, Text, Alert } from 'react-native';
+import { View, StyleSheet, FlatList, Text, Alert, ScrollView } from 'react-native';
 import { 
   Modal, 
   Portal, 
@@ -126,45 +126,33 @@ export default function NewConversationModal({ visible, onDismiss, onConversatio
       //   name: isGroup ? groupName.trim() : null
       // });
       
-      const { data: conversation, error: convError } = await DatabaseService.createConversation({
-        type: isGroup ? 'group' : 'direct',
-        name: isGroup ? groupName.trim() : null  // Direct conversations must have NULL name per database constraint
-      });
-
-      if (convError) {
-        console.error('Error creating conversation:', convError);
-        return;
-      }
-
-      // console.log('✅ Conversation created successfully:', conversation);
-
-      // Add participants
-      // console.log('🔍 selectedUsers type:', typeof selectedUsers, Array.isArray(selectedUsers));
-      // console.log('🔍 selectedUsers content:', selectedUsers);
-      
+      // Prepare participant IDs (selected users, excluding self since function adds creator automatically)
       if (!Array.isArray(selectedUsers)) {
         console.error('selectedUsers is not an array:', selectedUsers);
         Alert.alert('Error', 'Invalid user selection. Please try again.');
         return;
       }
       
-      const participants = [user.id, ...selectedUsers.map(u => u.id)];
-      // console.log('👥 Adding participants:', participants);
-      
-      const { data: participantsData, error: participantsError } = await DatabaseService.addConversationParticipants(
-        conversation.id, 
-        participants
-      );
+      const { data: conversation, error: convError } = await DatabaseService.createConversation({
+        type: isGroup ? 'group' : 'direct',
+        name: isGroup ? groupName.trim() : null,
+        participantIds: selectedUsers.map(u => u.id)  // Function adds creator + these participants
+      });
 
-      if (participantsError) {
-        console.error('Error adding participants:', participantsError);
+      if (convError) {
+        console.error('Error creating conversation:', convError);
+        Alert.alert('Error', 'Failed to create conversation');
         return;
       }
 
-      // console.log('✅ Participants added successfully:', participantsData);
+      // Check if we got an existing conversation
+      if (conversation.existing) {
+        console.log('✅ Using existing conversation:', conversation.id);
+      } else {
+        console.log('✅ Created new conversation:', conversation.id);
+      }
 
-      // Close modal and navigate to conversation
-      // console.log('🎉 Conversation creation completed successfully!');
+      // Function handles adding participants, no need for manual addConversationParticipants
       onDismiss();
       onConversationCreated(conversation);
     } catch (error) {
@@ -213,21 +201,31 @@ export default function NewConversationModal({ visible, onDismiss, onConversatio
               style={styles.searchbar}
             />
 
-            <View style={styles.selectedContainer}>
-              <Text style={styles.selectedLabel}>
-                Selected: {selectedUsers.length} user{selectedUsers.length !== 1 ? 's' : ''}
-              </Text>
-              {selectedUsers.map(user => (
-                <View key={user.id} style={styles.selectedUserChip}>
-                  <Avatar.Text 
-                    size={24} 
-                    label={user.username?.charAt(0)?.toUpperCase() || '?'}
-                    style={styles.chipAvatar}
-                  />
-                  <Text style={styles.chipText}>{user.username}</Text>
-                </View>
-              ))}
-            </View>
+            {selectedUsers.length > 0 && (
+              <View style={styles.selectedContainer}>
+                <Text style={styles.selectedLabel}>
+                  Selected: {selectedUsers.length} user{selectedUsers.length !== 1 ? 's' : ''}
+                </Text>
+                <ScrollView 
+                  style={styles.selectedScrollContainer}
+                  showsVerticalScrollIndicator={true}
+                  nestedScrollEnabled={true}
+                >
+                  <View style={styles.selectedChipsContainer}>
+                    {selectedUsers.map(user => (
+                      <View key={user.id} style={styles.selectedUserChip}>
+                        <Avatar.Text 
+                          size={24} 
+                          label={user.username?.charAt(0)?.toUpperCase() || '?'}
+                          style={styles.chipAvatar}
+                        />
+                        <Text style={styles.chipText}>{user.username}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            )}
 
             {/* Show group name input if multiple users selected */}
             {selectedUsers.length > 1 && (
@@ -309,6 +307,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     marginBottom: 8,
+  },
+  selectedScrollContainer: {
+    maxHeight: 120, // Limit to ~3 rows of chips
+  },
+  selectedChipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   selectedUserChip: {
     flexDirection: 'row',

@@ -5,7 +5,7 @@ import { Audio } from 'expo-av';
 import { useAuth } from '../contexts/AuthContext';
 import LanguageService from '../services/language';
 
-export default function VoiceMessage({ 
+function VoiceMessage({ 
   message, 
   userLanguage, 
   autoTranslateEnabled, 
@@ -23,6 +23,7 @@ export default function VoiceMessage({
   const [translation, setTranslation] = useState(null);
   const [showTranslation, setShowTranslation] = useState(false);
   const [messageLanguage, setMessageLanguage] = useState(null);
+  const [needsTranslation, setNeedsTranslation] = useState(false);
   
   const positionInterval = useRef(null);
   const waveAnimation = useRef(new Animated.Value(0)).current;
@@ -38,20 +39,15 @@ export default function VoiceMessage({
       setDuration(voiceDuration);
     }
 
-    // Check if transcription is available
-    if (message.content && message.content.trim()) {
+    // Check if transcription already exists
+    if (message.content && message.content.trim() && message.content !== '[Voice Message]') {
       setTranscription(message.content);
+      return; // Skip API call
     }
 
-    // Check if this is a new voice message that needs transcription
+    // Only call API if no transcription exists
     if (voiceUrl && !transcription && !isTranscribing) {
-      // Trigger real transcription process
       performTranscription();
-    }
-
-    // Detect message language when transcription is available
-    if (transcription && !messageLanguage) {
-      detectMessageLanguage();
     }
 
     return () => {
@@ -63,30 +59,23 @@ export default function VoiceMessage({
         clearInterval(positionInterval.current);
       }
     };
-  }, [voiceUrl, voiceDuration]);
+  }, [voiceUrl, voiceDuration, message.content]);
 
   // Separate useEffect for language detection when transcription is available
   useEffect(() => {
     if (transcription && !messageLanguage) {
       detectMessageLanguage();
     }
-  }, [transcription, messageLanguage]);
+  }, [transcription]); // Remove messageLanguage to prevent loop
 
   // Auto-translate if enabled and needed
   useEffect(() => {
-    console.log('🔄 VoiceMessage auto-translate check:', {
-      needsTranslation,
-      autoTranslateEnabled,
-      transcription: !!transcription,
-      translation: !!translation,
-      messageLanguage
-    });
-    
+    // Only log when actually translating, not on every render
     if (needsTranslation && autoTranslateEnabled && transcription && !translation) {
       console.log('✅ Auto-translating voice message');
       handleTranslate();
     }
-  }, [needsTranslation, autoTranslateEnabled, transcription, translation, messageLanguage]);
+  }, [needsTranslation, autoTranslateEnabled, transcription, translation]);
 
   // Detect message language
   const detectMessageLanguage = async () => {
@@ -97,17 +86,17 @@ export default function VoiceMessage({
       const LanguageService = (await import('../services/language')).default;
       const detection = LanguageService.detectLanguage(transcription);
       const detectedLanguage = LanguageService.toISO6391(detection.language) || 'en';
+      const translationNeeded = LanguageService.toISO6391(detectedLanguage) !== LanguageService.toISO6391(userLanguage);
+      
       console.log('🔍 VoiceMessage: Detected language:', detectedLanguage, 'User language:', userLanguage);
       setMessageLanguage(detectedLanguage);
+      setNeedsTranslation(translationNeeded);
     } catch (error) {
       console.error('❌ Language detection error:', error);
       setMessageLanguage('en'); // Default to English
+      setNeedsTranslation(false);
     }
   };
-
-  // Check if translation is needed (similar to TranslatedMessage)
-  const needsTranslation = messageLanguage && 
-    LanguageService.toISO6391(messageLanguage) !== LanguageService.toISO6391(userLanguage);
 
   // Real transcription process using VoiceService
   const performTranscription = async () => {
@@ -400,7 +389,6 @@ export default function VoiceMessage({
             ) : (
               <View>
                 <Text style={styles.transcriptionText}>{transcription}</Text>
-                 {console.log('🔍 VoiceMessage: Translate button check - isOwn:', isOwn, 'messageLanguage:', messageLanguage, 'userLanguage:', userLanguage, 'normalized comparison:', LanguageService.toISO6391(messageLanguage), '!==', LanguageService.toISO6391(userLanguage))}
                  {!isOwn && needsTranslation && !autoTranslateEnabled && !translation && (
                   <Button
                     mode="text"
@@ -649,4 +637,17 @@ const styles = StyleSheet.create({
     color: '#8B5CF6',
     fontSize: 12,
   },
+});
+
+// Memoize component to prevent unnecessary re-renders
+export default React.memo(VoiceMessage, (prevProps, nextProps) => {
+  // Only re-render if essential props change
+  return (
+    prevProps.message.id === nextProps.message.id &&
+    prevProps.userLanguage === nextProps.userLanguage &&
+    prevProps.autoTranslateEnabled === nextProps.autoTranslateEnabled &&
+    prevProps.message.voiceUrl === nextProps.message.voiceUrl &&
+    prevProps.message.content === nextProps.message.content &&
+    prevProps.message.isOwn === nextProps.message.isOwn
+  );
 });
