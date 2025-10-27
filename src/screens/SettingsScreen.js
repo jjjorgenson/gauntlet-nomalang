@@ -16,12 +16,14 @@ import {
   Snackbar
 } from 'react-native-paper';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import DatabaseService from '../services/database';
 import LanguageService from '../services/language';
 import { supabase } from '../lib/supabase';
 
 export default function SettingsScreen() {
   const { user, signOut } = useAuth();
+  const { theme, updateThemePreference } = useTheme();
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -130,22 +132,13 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleThemeChange = async (theme) => {
+  const handleThemeChange = async (newTheme) => {
     if (!user?.id) return;
 
     try {
       setSaving(true);
-      const { error } = await DatabaseService.updateUserProfile(user.id, {
-        theme_preference: theme
-      });
-
-      if (error) {
-        console.error('Error updating theme preference:', error);
-        showSnackbar('Failed to update theme preference', 'error');
-        return;
-      }
-
-      setThemePreference(theme);
+      await updateThemePreference(newTheme);
+      setThemePreference(newTheme);
       setShowThemeModal(false);
       showSnackbar('Theme preference updated');
     } catch (error) {
@@ -176,9 +169,9 @@ export default function SettingsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#8B5CF6" />
-        <Text style={styles.loadingText}>Loading settings...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator size="large" color={theme.colors.accent} />
+        <Text style={[styles.loadingText, { color: theme.colors.text }]}>Loading settings...</Text>
       </View>
     );
   }
@@ -188,14 +181,14 @@ export default function SettingsScreen() {
 
   return (
     <>
-      <ScrollView style={styles.container}>
+      <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
         {/* Profile Section */}
-        <Card style={styles.card}>
+        <Card style={[styles.card, { backgroundColor: theme.colors.card }]}>
           <Card.Content>
-            <Title>Profile</Title>
-            <Paragraph>Username: {userProfile?.username || 'Loading...'}</Paragraph>
-            <Paragraph>Email: {userProfile?.email || 'Loading...'}</Paragraph>
-            <Paragraph>
+            <Title style={{ color: theme.colors.text }}>Profile</Title>
+            <Paragraph style={{ color: theme.colors.text }}>Username: {userProfile?.username || 'Loading...'}</Paragraph>
+            <Paragraph style={{ color: theme.colors.text }}>Email: {userProfile?.email || 'Loading...'}</Paragraph>
+            <Paragraph style={{ color: theme.colors.text }}>
               Native Language: {currentLanguage ? 
                 LanguageService.formatLanguageForSettings(currentLanguage.code) : 
                 'Loading...'
@@ -206,6 +199,7 @@ export default function SettingsScreen() {
               onPress={() => setShowLanguageModal(true)}
               style={styles.button}
               disabled={saving}
+              textColor={theme.colors.accent}
             >
               Change Language
             </Button>
@@ -213,12 +207,14 @@ export default function SettingsScreen() {
         </Card>
 
         {/* Translation Settings */}
-        <Card style={styles.card}>
+        <Card style={[styles.card, { backgroundColor: theme.colors.card }]}>
           <Card.Content>
-            <Title>Translation</Title>
+            <Title style={{ color: theme.colors.text }}>Translation</Title>
             <List.Item
               title="Auto-translate Default"
               description="Automatically translate foreign messages (can be overridden per conversation)"
+              titleStyle={{ color: theme.colors.text }}
+              descriptionStyle={{ color: theme.colors.textSecondary }}
               right={() => (
                 <Switch
                   value={autoTranslateEnabled}
@@ -231,17 +227,20 @@ export default function SettingsScreen() {
         </Card>
 
         {/* Appearance Settings */}
-        <Card style={styles.card}>
+        <Card style={[styles.card, { backgroundColor: theme.colors.card }]}>
           <Card.Content>
-            <Title>Appearance</Title>
+            <Title style={{ color: theme.colors.text }}>Appearance</Title>
             <List.Item
               title="Theme"
               description={`Current: ${themePreference.charAt(0).toUpperCase() + themePreference.slice(1)}`}
+              titleStyle={{ color: theme.colors.text }}
+              descriptionStyle={{ color: theme.colors.textSecondary }}
               right={() => (
                 <Button 
                   mode="text" 
                   onPress={() => setShowThemeModal(true)}
                   disabled={saving}
+                  textColor={theme.colors.accent}
                 >
                   Change
                 </Button>
@@ -251,16 +250,16 @@ export default function SettingsScreen() {
         </Card>
 
         {/* About Section */}
-        <Card style={styles.card}>
+        <Card style={[styles.card, { backgroundColor: theme.colors.card }]}>
           <Card.Content>
-            <Title>About</Title>
-            <Paragraph>NomaLang v1.0.0</Paragraph>
-            <Paragraph>Multilingual Family Chat</Paragraph>
+            <Title style={{ color: theme.colors.text }}>About</Title>
+            <Paragraph style={{ color: theme.colors.text }}>NomaLang v1.0.0</Paragraph>
+            <Paragraph style={{ color: theme.colors.text }}>Multilingual Family Chat</Paragraph>
           </Card.Content>
         </Card>
 
         {/* Sign Out */}
-        <Card style={styles.card}>
+        <Card style={[styles.card, { backgroundColor: theme.colors.card }]}>
           <Card.Content>
             <Button 
               mode="contained" 
@@ -425,22 +424,18 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B141A',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0B141A',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#FFFFFF',
   },
   card: {
     margin: 16,
-    backgroundColor: '#1F2C34',
   },
   button: {
     marginTop: 8,

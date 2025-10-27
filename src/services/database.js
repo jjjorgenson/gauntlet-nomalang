@@ -412,30 +412,162 @@ export class DatabaseService {
       .subscribe();
   }
 
-  static subscribeToTyping(conversationId, callback) {
+  // Online Status Methods
+  static async setOnlineStatus(userId, isOnline) {
+    try {
+      const { error } = await supabase
+        .from('user_online_status')
+        .upsert({
+          user_id: userId,
+          is_online: isOnline,
+          last_seen: new Date().toISOString()
+        }, {
+          onConflict: 'user_id'
+        });
+      
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error('Error setting online status:', error);
+      return { success: false, error };
+    }
+  }
+
+  static async getOnlineStatus(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('user_online_status')
+        .select('is_online')
+        .eq('user_id', userId)
+        .single();
+      
+      if (error) throw error;
+      return { data: data?.is_online || false, error: null };
+    } catch (error) {
+      console.error('Error getting online status:', error);
+      return { data: false, error };
+    }
+  }
+
+  static subscribeToOnlineStatus(callback) {
     return supabase
-      .channel(`typing:${conversationId}`)
-      .on('presence', { event: 'sync' }, callback)
-      .on('presence', { event: 'join' }, callback)
-      .on('presence', { event: 'leave' }, callback)
+      .channel('online_status')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'user_online_status',
+        filter: 'is_online=eq.true'
+      }, callback)
       .subscribe();
   }
 
-  static setTypingStatus(conversationId, userId, isTyping) {
-    const channel = supabase.channel(`typing:${conversationId}`);
-    
-    if (isTyping) {
-      return channel.track({
-        user: userId,
-        online_at: new Date().toISOString(),
-        typing: true
-      });
-    } else {
-      return channel.track({
-        user: userId,
-        online_at: new Date().toISOString(),
-        typing: false
-      });
+  // Typing Status Methods (using new typing_status table)
+  static async setTypingStatus(conversationId, userId, isTyping) {
+    try {
+      const { error } = await supabase
+        .from('typing_status')
+        .upsert({
+          conversation_id: conversationId,
+          user_id: userId,
+          is_typing: isTyping,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,conversation_id'
+        });
+      
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error('Error setting typing status:', error);
+      return { success: false, error };
+    }
+  }
+
+  static async getTypingStatus(conversationId) {
+    try {
+      const { data, error } = await supabase
+        .from('typing_status')
+        .select(`
+          user_id,
+          is_typing,
+          updated_at,
+          users!typing_status_user_id_fkey (
+            id,
+            username,
+            avatar_url
+          )
+        `)
+        .eq('conversation_id', conversationId)
+        .eq('is_typing', true);
+      
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      console.error('Error getting typing status:', error);
+      return { data: null, error };
+    }
+  }
+
+  static subscribeToTyping(conversationId, callback) {
+    return supabase
+      .channel(`typing:${conversationId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'typing_status',
+        filter: `conversation_id=eq.${conversationId}`
+      }, callback)
+      .subscribe();
+  }
+
+  // Read Receipt Methods
+  static async markMessageAsRead(messageId, userId) {
+    try {
+      const { error } = await supabase
+        .from('message_statuses')
+        .upsert({
+          message_id: messageId,
+          user_id: userId,
+          status: 'read',
+          read_at: new Date().toISOString()
+        }, {
+          onConflict: 'message_id,user_id'
+        });
+      
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error('Error marking message as read:', error);
+      return { success: false, error };
+    }
+  }
+
+  static async getMessageReadStatus(messageId) {
+    try {
+      const { data, error } = await supabase
+        .rpc('get_message_read_status', { message_uuid: messageId });
+      
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      console.error('Error getting message read status:', error);
+      return { data: null, error };
+    }
+  }
+
+  static async getUnreadMessageCount(conversationId, userId) {
+    try {
+      const { data, error } = await supabase
+        .rpc('get_unread_message_count', { 
+          p_conversation_id: conversationId, 
+          p_user_id: userId 
+        });
+      
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      console.error('Error getting unread message count:', error);
+      return { data: null, error };
     }
   }
 

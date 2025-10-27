@@ -3,33 +3,48 @@ import { View, StyleSheet, FlatList, Text, RefreshControl } from 'react-native';
 import { Card, Title, Paragraph, Button, FAB, Avatar, Badge } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import DatabaseService from '../services/database';
 import MessagingService from '../services/messaging';
 import StorageService from '../lib/storage';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { supabase } from '../lib/supabase';
 import NewConversationModal from '../components/NewConversationModal';
+import OnlineStatusDot from '../components/OnlineStatusDot';
 
 export default function ChatsScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
+  const { theme } = useTheme();
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showNewConversationModal, setShowNewConversationModal] = useState(false);
+  const [onlineStatuses, setOnlineStatuses] = useState({});
   
   // Real-time subscription
   const messageSubscription = useRef(null);
+  const onlineStatusSubscription = useRef(null);
   const { isOnline } = useNetworkStatus();
 
   useEffect(() => {
     loadConversations();
     setupRealtimeSubscription();
+    setupOnlineStatusSubscription();
+    
+    // Refresh online statuses every 30 seconds
+    const statusInterval = setInterval(() => {
+      refreshOnlineStatuses();
+    }, 30000);
     
     return () => {
       if (messageSubscription.current) {
         messageSubscription.current.unsubscribe();
       }
+      if (onlineStatusSubscription.current) {
+        onlineStatusSubscription.current.unsubscribe();
+      }
+      clearInterval(statusInterval);
     };
   }, [user]);
 
@@ -83,6 +98,9 @@ export default function ChatsScreen() {
       });
 
       setConversations(sortedConversations);
+      
+      // Load online statuses for direct conversations
+      await refreshOnlineStatuses(sortedConversations);
       
       // Mark last messages as delivered (preview = delivered)
       for (const item of data || []) {
@@ -181,6 +199,65 @@ export default function ChatsScreen() {
         async (payload) => {
           console.log('New message received in ChatsScreen:', payload);
           await updateConversationPreview(payload.new);
+        }
+      )
+      .subscribe();
+  };
+  
+  // Refresh online statuses for all conversation participants
+  const refreshOnlineStatuses = async (conversationsList = conversations) => {
+    if (!user) return;
+    
+    try {
+      const directConversations = conversationsList.filter(conv => conv.type === 'direct' && conv.otherUser);
+      const userIds = directConversations.map(conv => conv.otherUser.id);
+      
+      if (userIds.length > 0) {
+        const { data: onlineStatuses } = await supabase
+          .from('user_online_status')
+          .select('user_id, is_online')
+          .in('user_id', userIds);
+        
+        const statusMap = {};
+        onlineStatuses?.forEach(status => {
+          statusMap[status.user_id] = status.is_online;
+        });
+        
+        setOnlineStatuses(prev => ({ ...prev, ...statusMap }));
+        console.log('📊 Loaded online statuses:', statusMap);
+        console.log('📊 Direct conversations:', directConversations.map(c => ({ name: c.name, otherUserId: c.otherUser?.id })));
+      }
+    } catch (error) {
+      console.error('Error refreshing online statuses:', error);
+    }
+  };
+  
+  // Setup online status subscription
+  const setupOnlineStatusSubscription = () => {
+    if (!user) return;
+    
+    onlineStatusSubscription.current = supabase
+      .channel('online-status')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'user_online_status'
+        },
+        (payload) => {
+          console.log('📊 Online status update:', payload);
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            setOnlineStatuses(prev => ({
+              ...prev,
+              [payload.new.user_id]: payload.new.is_online
+            }));
+          } else if (payload.eventType === 'DELETE') {
+            setOnlineStatuses(prev => ({
+              ...prev,
+              [payload.old.user_id]: false
+            }));
+          }
         }
       )
       .subscribe();
@@ -349,8 +426,16 @@ export default function ChatsScreen() {
     });
   };
 
-  const renderConversation = ({ item }) => (
-    <Card style={styles.conversationCard} onPress={() => {
+  const renderConversation = ({ item }) => {
+    console.log('🔍 Rendering conversation:', { 
+      name: item.name, 
+      type: item.type, 
+      otherUser: item.otherUser?.id,
+      onlineStatus: onlineStatuses[item.otherUser?.id]
+    });
+    
+    return (
+    <Card style={[styles.conversationCard, { backgroundColor: theme.colors.card }]} onPress={() => {
       navigation.navigate('Conversation', {
         conversationId: item.id,
         conversationName: item.name || 'New Chat'
@@ -363,16 +448,22 @@ export default function ChatsScreen() {
             label={item.name?.charAt(0) || '?'} 
             style={styles.avatar}
           />
-          {item.type === 'direct' && (
-            <View style={[styles.statusIndicator, styles.statusOffline]} />
+          {item.type === 'direct' && item.otherUser && (
+            <OnlineStatusDot 
+              isOnline={onlineStatuses[item.otherUser.id] || false}
+              size="small"
+              style={styles.statusDot}
+            />
           )}
         </View>
         <View style={styles.conversationInfo}>
-          <Title style={styles.conversationTitle}>{item.name || 'New Chat'}</Title>
-          <Paragraph style={styles.lastMessage} numberOfLines={1}>
+          <View style={styles.titleRow}>
+            <Title style={[styles.conversationTitle, { color: theme.colors.text }]}>{item.name || 'New Chat'}</Title>
+          </View>
+          <Paragraph style={[styles.lastMessage, { color: theme.colors.textSecondary }]} numberOfLines={1}>
             {item.lastMessage || 'No messages yet'}
           </Paragraph>
-        <Text style={styles.timestamp}>
+        <Text style={[styles.timestamp, { color: theme.colors.textSecondary }]}>
           {item.lastMessageTime || 'Just now'}
         </Text>
         </View>
@@ -381,18 +472,19 @@ export default function ChatsScreen() {
         )}
       </Card.Content>
     </Card>
-  );
+    );
+  };
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <Text>Loading conversations...</Text>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Text style={{ color: theme.colors.text }}>Loading conversations...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <FlatList
         data={conversations}
         renderItem={renderConversation}
@@ -400,8 +492,8 @@ export default function ChatsScreen() {
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No conversations yet</Text>
-            <Text style={styles.emptySubtext}>
+            <Text style={[styles.emptyText, { color: theme.colors.text }]}>No conversations yet</Text>
+            <Text style={[styles.emptySubtext, { color: theme.colors.textSecondary }]}>
               Start a new chat to begin communicating across languages
             </Text>
           </View>
@@ -409,7 +501,7 @@ export default function ChatsScreen() {
       />
       
       <FAB
-        style={styles.fab}
+        style={[styles.fab, { backgroundColor: theme.colors.accent }]}
         icon="plus"
         onPress={handleNewConversation}
       />
@@ -426,14 +518,12 @@ export default function ChatsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   listContainer: {
     padding: 16,
   },
   conversationCard: {
     marginBottom: 12,
-    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -470,15 +560,28 @@ const styles = StyleSheet.create({
   statusOffline: {
     backgroundColor: '#9CA3AF',
   },
+  statusDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+  },
   conversationInfo: {
     flex: 1,
     marginLeft: 12,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   conversationTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 4,
+    flex: 1,
+  },
+  titleStatusDot: {
+    marginLeft: 8,
   },
   lastMessage: {
     fontSize: 14,

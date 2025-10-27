@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase, auth } from '../lib/supabase';
 import DatabaseService from '../services/database';
+import MessagingService from '../services/messaging';
 
 const AuthContext = createContext({});
 
@@ -15,12 +16,14 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const heartbeatInterval = useRef(null);
 
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         await ensureUserProfile(session.user);
+        startOnlineHeartbeat(session.user.id);
       }
       setUser(session?.user ?? null);
       setLoading(false);
@@ -31,13 +34,19 @@ export const AuthProvider = ({ children }) => {
       async (event, session) => {
         if (session?.user) {
           await ensureUserProfile(session.user);
+          startOnlineHeartbeat(session.user.id);
+        } else {
+          stopOnlineHeartbeat();
         }
         setUser(session?.user ?? null);
         setLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      stopOnlineHeartbeat();
+    };
   }, []);
 
   const ensureUserProfile = async (authUser) => {
@@ -118,6 +127,40 @@ export const AuthProvider = ({ children }) => {
     const { error } = await auth.signOut();
     setLoading(false);
     return { error };
+  };
+
+  // Online status heartbeat functions
+  const startOnlineHeartbeat = (userId) => {
+    // Clear any existing heartbeat
+    stopOnlineHeartbeat();
+    
+    // Set user as online immediately
+    DatabaseService.setOnlineStatus(userId, true);
+    
+    // Set up heartbeat to keep user online (every 30 seconds)
+    heartbeatInterval.current = setInterval(async () => {
+      try {
+        await DatabaseService.setOnlineStatus(userId, true);
+        console.log('💓 Online heartbeat sent');
+      } catch (error) {
+        console.error('Error sending online heartbeat:', error);
+      }
+    }, 30000);
+    
+    console.log('🟢 Started online heartbeat for user:', userId);
+  };
+
+  const stopOnlineHeartbeat = () => {
+    if (heartbeatInterval.current) {
+      clearInterval(heartbeatInterval.current);
+      heartbeatInterval.current = null;
+      
+      // Set user as offline
+      if (user?.id) {
+        DatabaseService.setOnlineStatus(user.id, false);
+        console.log('🔴 Stopped online heartbeat, user set to offline');
+      }
+    }
   };
 
   const value = {

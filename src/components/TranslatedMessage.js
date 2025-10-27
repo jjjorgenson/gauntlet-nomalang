@@ -308,6 +308,7 @@ function TranslatedMessage({
         explanation={slangExplanation}
         isLoading={isExplainingSlang}
         error={slangError}
+        language={userLanguage}
       />
     </View>
   );

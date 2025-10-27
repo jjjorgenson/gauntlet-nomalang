@@ -3,6 +3,7 @@ import { View, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'react-n
 import { Text, Card, IconButton, FAB } from 'react-native-paper';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import MessagingService from '../services/messaging';
 import DatabaseService from '../services/database';
 import StorageService from '../lib/storage';
@@ -11,11 +12,14 @@ import { useOfflineQueue } from '../hooks/useOfflineQueue';
 import TranslatedMessage from '../components/TranslatedMessage';
 import VoiceMessage from '../components/VoiceMessage';
 import VoiceRecorder from '../components/VoiceRecorder';
+import TypingIndicator from '../components/TypingIndicator';
+import OnlineStatusDot from '../components/OnlineStatusDot';
 
 export default function ConversationScreen() {
   const route = useRoute();
   const navigation = useNavigation();
   const { user } = useAuth();
+  const { theme } = useTheme();
   const { conversationId, conversationName } = route.params || {};
   
   const [messages, setMessages] = useState([]);
@@ -23,6 +27,8 @@ export default function ConversationScreen() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [typingUsers, setTypingUsers] = useState([]);
+  const [typingSubscription, setTypingSubscription] = useState(null);
+  const [otherUserOnlineStatus, setOtherUserOnlineStatus] = useState(false);
   const [offset, setOffset] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
@@ -62,7 +68,6 @@ export default function ConversationScreen() {
   
   const messagingService = useRef(new MessagingService());
   const messageSubscription = useRef(null);
-  const typingSubscription = useRef(null);
   const flatListRef = useRef(null);
   const shouldScrollToBottom = useRef(true);
   const hasScrolledToBottom = useRef(false);
@@ -84,12 +89,29 @@ export default function ConversationScreen() {
       if (messageSubscription.current) {
         messageSubscription.current.unsubscribe();
       }
-      if (typingSubscription.current) {
-        typingSubscription.current.unsubscribe();
+      if (typingSubscription) {
+        typingSubscription.unsubscribe();
       }
       messagingService.current.unsubscribeFromConversation(conversationId);
     };
   }, [conversationId, user]);
+
+  // Set up navigation header with online status
+  useEffect(() => {
+    if (!conversationId || !conversationName) return;
+
+    navigation.setOptions({
+      title: conversationName,
+      headerRight: () => (
+        <View style={{marginRight: 10}}>
+          <OnlineStatusDot 
+            isOnline={otherUserOnlineStatus} 
+            size="small"
+          />
+        </View>
+      ),
+    });
+  }, [conversationId, conversationName, otherUserOnlineStatus, navigation]);
   
   // Auto-sync offline queue when network comes back online
   useEffect(() => {
@@ -443,13 +465,49 @@ export default function ConversationScreen() {
     );
 
     // Subscribe to typing indicators
-    typingSubscription.current = messagingService.current.subscribeToTyping(
+    const subscription = messagingService.current.subscribeToTyping(
       conversationId,
-      (typingUsers) => {
-        // console.log('🔴 Typing users update:', typingUsers);
-        setTypingUsers(typingUsers.filter(u => u !== user.id));
+      (typingEvent) => {
+        console.log('🔴 Typing event received:', typingEvent);
+        
+        if (typingEvent.type === 'typing_start') {
+          setTypingUsers(prev => {
+            const exists = prev.some(u => u.userId === typingEvent.userId);
+            if (!exists && typingEvent.userId !== user.id) {
+              return [...prev, {
+                userId: typingEvent.userId,
+                user: typingEvent.user
+              }];
+            }
+            return prev;
+          });
+        } else if (typingEvent.type === 'typing_stop') {
+          setTypingUsers(prev => prev.filter(u => u.userId !== typingEvent.userId));
+        }
       }
     );
+    
+    setTypingSubscription(subscription);
+
+    // Fetch other user's online status for direct conversations
+    const fetchOtherUserOnlineStatus = async () => {
+      try {
+        // Get conversation participants to find the other user
+        const { data: participants } = await DatabaseService.getConversationParticipants(conversationId);
+        if (participants && participants.length === 2) {
+          const otherUser = participants.find(p => p.user_id !== user.id);
+          if (otherUser) {
+            const { data: onlineStatus } = await DatabaseService.getOnlineStatus(otherUser.user_id);
+            setOtherUserOnlineStatus(onlineStatus?.is_online || false);
+            console.log('🔍 Other user online status:', { userId: otherUser.user_id, isOnline: onlineStatus?.is_online });
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching other user online status:', error);
+      }
+    };
+
+    fetchOtherUserOnlineStatus();
   };
 
   const sendMessage = async () => {
@@ -831,17 +889,13 @@ export default function ConversationScreen() {
   };
 
   const renderTypingIndicator = () => {
-    if (typingUsers.length === 0) return null;
+    console.log('🔍 Rendering typing indicator:', { typingUsersCount: typingUsers.length, typingUsers });
     
     return (
-      <View style={styles.typingContainer}>
-        <Text style={styles.typingText}>
-          {typingUsers.length === 1 
-            ? `${typingUsers[0]} is typing...`
-            : `${typingUsers.length} people are typing...`
-          }
-        </Text>
-      </View>
+      <TypingIndicator 
+        typingUsers={typingUsers}
+        currentUserId={user?.id}
+      />
     );
   };
   
@@ -898,29 +952,31 @@ export default function ConversationScreen() {
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <Text>Loading conversation...</Text>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <Text style={{ color: theme.colors.text }}>Loading conversation...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {renderOfflineBanner()}
       {renderQueueIndicator()}
       
       {/* Temporary translation toggle for testing */}
       <View style={styles.translationToggle}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[
             styles.toggleButton,
-            autoTranslateEnabled && styles.toggleButtonActive
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            autoTranslateEnabled && { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent }
           ]}
           onPress={handleAutoTranslateToggle}
         >
           <Text style={[
             styles.toggleButtonText,
-            autoTranslateEnabled && styles.toggleButtonTextActive
+            { color: theme.colors.textSecondary },
+            autoTranslateEnabled && { color: '#FFFFFF' }
           ]}>
             {autoTranslateEnabled ? '🔄 Auto-translate ON' : '⏸️ Auto-translate OFF'}
           </Text>
@@ -954,25 +1010,25 @@ export default function ConversationScreen() {
         }}
       />
 
-      <View style={styles.inputContainer}>
+      <View style={[styles.inputContainer, { backgroundColor: theme.colors.surface }]}>
         <TextInput
-          style={styles.textInput}
+          style={[styles.textInput, { color: theme.colors.text }]}
           value={newMessage}
           onChangeText={handleTyping}
           placeholder="Type a message..."
-          placeholderTextColor="#8696A0"
+          placeholderTextColor={theme.colors.textSecondary}
           multiline
           editable={!sending}
         />
         <TouchableOpacity 
           onPress={sendMessage} 
-          style={[styles.sendButton, sending && styles.sendButtonDisabled]}
+          style={[styles.sendButton, { backgroundColor: theme.colors.accent }, sending && styles.sendButtonDisabled]}
           disabled={sending}
         >
           <IconButton 
             icon={sending ? "loading" : "send"} 
             size={24} 
-            iconColor={sending ? "#8696A0" : "#34B7F1"} 
+            iconColor={sending ? theme.colors.textSecondary : "#FFFFFF"} 
           />
         </TouchableOpacity>
       </View>
@@ -992,7 +1048,6 @@ export default function ConversationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   messagesList: {
     padding: 16,
@@ -1196,24 +1251,14 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E7EB',
   },
   toggleButton: {
-    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 12,
     alignSelf: 'flex-start',
   },
-  toggleButtonActive: {
-    backgroundColor: '#8B5CF6',
-    borderColor: '#8B5CF6',
-  },
   toggleButtonText: {
-    color: '#6B7280',
     fontSize: 12,
     fontWeight: '500',
-  },
-  toggleButtonTextActive: {
-    color: '#FFFFFF',
   },
 });

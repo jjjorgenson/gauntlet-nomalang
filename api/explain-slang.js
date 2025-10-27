@@ -8,7 +8,8 @@ import { supabase } from '../lib/supabase.js'
  * Request body:
  * {
  *   "text": "That's cap, fr fr",
- *   "context": "casual conversation" // optional
+ *   "context": "casual conversation", // optional
+ *   "targetLanguage": "es" // optional, defaults to "en"
  * }
  * 
  * Response:
@@ -17,8 +18,8 @@ import { supabase } from '../lib/supabase.js'
  *   "terms": [
  *     {
  *       "term": "cap",
- *       "explanation": "lie or false statement",
- *       "context": "Gen Z slang, primarily US"
+ *       "explanation": "mentira o declaración falsa", // in target language
+ *       "context": "jerga Gen Z, principalmente EE.UU." // in target language
  *     }
  *   ]
  * }
@@ -44,7 +45,7 @@ export default async function handler(req, res) {
 
   try {
     // Validate request body
-    const { text, context = 'general' } = req.body
+    const { text, context = 'general', targetLanguage = 'en' } = req.body
 
     if (!text || typeof text !== 'string') {
       return res.status(400).json({
@@ -60,8 +61,16 @@ export default async function handler(req, res) {
       })
     }
 
-    // Check if we already have slang analysis for this text
-    const cacheKey = `slang_${text}_${context}`
+    // Validate target language (ISO 639-1 format)
+    if (typeof targetLanguage !== 'string' || targetLanguage.length !== 2) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'targetLanguage must be a valid 2-character language code'
+      })
+    }
+
+    // Check if we already have slang analysis for this text and language
+    const cacheKey = `slang_${text}_${context}_${targetLanguage}`
     const cachedResult = await getCachedSlangAnalysis(cacheKey)
     
     if (cachedResult) {
@@ -69,9 +78,9 @@ export default async function handler(req, res) {
       return res.status(200).json(cachedResult)
     }
 
-    // Call OpenAI for slang detection
-    console.log('Calling OpenAI for slang detection:', { text, context })
-    const result = await detectSlang(text)
+    // Call OpenAI for slang detection with target language
+    console.log('Calling OpenAI for slang detection:', { text, context, targetLanguage })
+    const result = await detectSlang(text, targetLanguage)
 
     // Cache the result (async, don't wait)
     cacheSlangAnalysis(cacheKey, result)

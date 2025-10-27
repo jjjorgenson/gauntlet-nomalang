@@ -240,42 +240,125 @@ export class MessagingService {
     return subscription;
   }
 
+  // Online Status Methods
+  async setOnlineStatus(userId, isOnline) {
+    try {
+      const result = await DatabaseService.setOnlineStatus(userId, isOnline);
+      return result;
+    } catch (error) {
+      console.error('Error setting online status:', error);
+      return { success: false, error };
+    }
+  }
+
+  async getOnlineStatus(userId) {
+    try {
+      const { data, error } = await DatabaseService.getOnlineStatus(userId);
+      return { data, error };
+    } catch (error) {
+      console.error('Error getting online status:', error);
+      return { data: null, error };
+    }
+  }
+
+  subscribeToOnlineStatus(onStatusChange) {
+    return DatabaseService.subscribeToOnlineStatus((payload) => {
+      onStatusChange(payload);
+    });
+  }
+
+  // Enhanced Typing Status Methods
+  async setTypingStatus(conversationId, userId, isTyping) {
+    try {
+      const result = await DatabaseService.setTypingStatus(conversationId, userId, isTyping);
+      
+      if (result.success) {
+        // Clear existing timeout
+        if (this.typingTimeouts.has(`${conversationId}-${userId}`)) {
+          clearTimeout(this.typingTimeouts.get(`${conversationId}-${userId}`));
+        }
+
+        if (isTyping) {
+          // Auto-clear typing after 3 seconds
+          const timeout = setTimeout(() => {
+            DatabaseService.setTypingStatus(conversationId, userId, false);
+            this.typingTimeouts.delete(`${conversationId}-${userId}`);
+          }, 3000);
+          
+          this.typingTimeouts.set(`${conversationId}-${userId}`, timeout);
+        } else {
+          this.typingTimeouts.delete(`${conversationId}-${userId}`);
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error setting typing status:', error);
+      return { success: false, error };
+    }
+  }
+
+  async getTypingStatus(conversationId) {
+    try {
+      const { data, error } = await DatabaseService.getTypingStatus(conversationId);
+      return { data, error };
+    } catch (error) {
+      console.error('Error getting typing status:', error);
+      return { data: null, error };
+    }
+  }
+
+  // Enhanced Read Receipt Methods
+  async markMessageAsRead(messageId, userId) {
+    try {
+      const result = await DatabaseService.markMessageAsRead(messageId, userId);
+      return result;
+    } catch (error) {
+      console.error('Error marking message as read:', error);
+      return { success: false, error };
+    }
+  }
+
+  async getMessageReadStatus(messageId) {
+    try {
+      const { data, error } = await DatabaseService.getMessageReadStatus(messageId);
+      return { data, error };
+    } catch (error) {
+      console.error('Error getting message read status:', error);
+      return { data: null, error };
+    }
+  }
+
   // Subscribe to typing indicators
   subscribeToTyping(conversationId, onTypingChange) {
-    const subscription = DatabaseService.subscribeToTyping(conversationId, (state) => {
-      const typingUsers = Object.values(state)
-        .filter(user => user.typing)
-        .map(user => user.user);
-      
-      onTypingChange(typingUsers);
+    const subscription = DatabaseService.subscribeToTyping(conversationId, (payload) => {
+      // Handle different event types
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        if (payload.new.is_typing) {
+          // User started typing
+          onTypingChange({
+            type: 'typing_start',
+            user: payload.new.users,
+            userId: payload.new.user_id
+          });
+        } else {
+          // User stopped typing
+          onTypingChange({
+            type: 'typing_stop',
+            user: payload.new.users,
+            userId: payload.new.user_id
+          });
+        }
+      } else if (payload.eventType === 'DELETE') {
+        // User left conversation or typing status was cleared
+        onTypingChange({
+          type: 'typing_stop',
+          userId: payload.old.user_id
+        });
+      }
     });
 
     return subscription;
-  }
-
-  // Set typing status
-  setTypingStatus(conversationId, userId, isTyping) {
-    // Clear existing timeout
-    if (this.typingTimeouts.has(conversationId)) {
-      clearTimeout(this.typingTimeouts.get(conversationId));
-    }
-
-    if (isTyping) {
-      // Set typing to true
-      DatabaseService.setTypingStatus(conversationId, userId, true);
-      
-      // Auto-clear typing after 3 seconds
-      const timeout = setTimeout(() => {
-        DatabaseService.setTypingStatus(conversationId, userId, false);
-        this.typingTimeouts.delete(conversationId);
-      }, 3000);
-      
-      this.typingTimeouts.set(conversationId, timeout);
-    } else {
-      // Clear typing immediately
-      DatabaseService.setTypingStatus(conversationId, userId, false);
-      this.typingTimeouts.delete(conversationId);
-    }
   }
 
   // Get conversation messages
@@ -318,10 +401,14 @@ export class MessagingService {
       this.subscriptions.delete(conversationId);
     }
 
-    if (this.typingTimeouts.has(conversationId)) {
-      clearTimeout(this.typingTimeouts.get(conversationId));
-      this.typingTimeouts.delete(conversationId);
-    }
+    // Clear all typing timeouts for this conversation
+    const conversationTimeouts = Array.from(this.typingTimeouts.keys())
+      .filter(key => key.startsWith(`${conversationId}-`));
+    
+    conversationTimeouts.forEach(key => {
+      clearTimeout(this.typingTimeouts.get(key));
+      this.typingTimeouts.delete(key);
+    });
   }
 
   // Clean up all subscriptions

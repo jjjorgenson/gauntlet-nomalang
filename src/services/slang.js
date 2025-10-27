@@ -49,14 +49,14 @@ class SlangService {
       return this.cache.get(cacheKey);
     }
 
-        const apiUrl = Config.getEndpoint('slang');
+    const apiUrl = Config.getEndpoint('slang');
     
     if (!apiUrl) {
       throw new Error('Slang explanation API endpoint not configured');
     }
 
     try {
-      console.log('🔍 Explaining slang:', text);
+      console.log('🔍 Explaining slang:', text, 'in language:', targetLanguage);
       
       const response = await this.fetchWithRetry(apiUrl, {
         method: 'POST',
@@ -65,7 +65,8 @@ class SlangService {
         },
         body: JSON.stringify({
           text,
-          targetLanguage
+          targetLanguage,
+          context: 'casual conversation'
         }),
         timeout: Config.getApiConfig().timeout
       });
@@ -77,13 +78,32 @@ class SlangService {
         throw new Error('Invalid slang API response format');
       }
 
-      // If no slang detected, return appropriate response
+      // If no slang detected, return appropriate response in target language
       if (!result.has_slang) {
-        return {
-          meaning: 'No slang detected in this text.',
-          context: 'The text appears to be in standard language.',
-          example: null
+        const noSlangMessages = {
+          'en': {
+            meaning: 'No slang detected in this text.',
+            context: 'The text appears to be in standard language.',
+            example: null
+          },
+          'es': {
+            meaning: 'No se detectó jerga en este texto.',
+            context: 'El texto parece estar en lenguaje estándar.',
+            example: null
+          },
+          'fr': {
+            meaning: 'Aucun argot détecté dans ce texte.',
+            context: 'Le texte semble être en langage standard.',
+            example: null
+          },
+          'de': {
+            meaning: 'Kein Slang in diesem Text erkannt.',
+            context: 'Der Text scheint in Standardsprache zu sein.',
+            example: null
+          }
         };
+        
+        return noSlangMessages[targetLanguage] || noSlangMessages['en'];
       }
 
       // If slang detected, format the response for the UI

@@ -8,6 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 // Import contexts and screens
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import ChatsScreen from './src/screens/ChatsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import AuthScreen from './src/screens/AuthScreen';
@@ -19,6 +20,7 @@ const Stack = createStackNavigator();
 
 function MainApp() {
   const { user, loading } = useAuth();
+  const { theme } = useTheme();
 
   if (loading) {
     return null; // Or a loading screen
@@ -49,15 +51,15 @@ function MainApp() {
 
                   return <MaterialIcons name={iconName} size={size} color={color} />;
                 },
-                tabBarActiveTintColor: '#8B5CF6',
-                tabBarInactiveTintColor: '#9CA3AF',
+                tabBarActiveTintColor: theme.colors.accent,
+                tabBarInactiveTintColor: theme.colors.textSecondary,
                 headerStyle: {
-                  backgroundColor: '#FFFFFF',
+                  backgroundColor: theme.colors.surface,
                 },
-                headerTintColor: '#1F2937',
+                headerTintColor: theme.colors.text,
                 tabBarStyle: {
-                  backgroundColor: '#FFFFFF',
-                  borderTopColor: '#E5E7EB',
+                  backgroundColor: theme.colors.surface,
+                  borderTopColor: theme.colors.border,
                 },
               })}
             >
@@ -80,9 +82,9 @@ function MainApp() {
           options={({ route }) => ({
             title: route.params?.conversationName || 'Chat',
             headerStyle: {
-              backgroundColor: '#FFFFFF',
+              backgroundColor: theme.colors.surface,
             },
-            headerTintColor: '#1F2937',
+            headerTintColor: theme.colors.text,
           })}
         />
       </Stack.Navigator>
@@ -90,13 +92,25 @@ function MainApp() {
   );
 }
 
+function AppContent() {
+  const { theme } = useTheme();
+  
+  return (
+    <>
+      <MainApp />
+      <StatusBar style={theme.dark ? "light" : "dark"} />
+    </>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
-      <PaperProvider>
-        <MainApp />
-        <StatusBar style="dark" />
-      </PaperProvider>
+      <ThemeProvider>
+        <PaperProvider>
+          <AppContent />
+        </PaperProvider>
+      </ThemeProvider>
     </AuthProvider>
   );
 }

@@ -8,18 +8,118 @@ export default function SlangExplanationModal({
   slangText,
   explanation,
   isLoading,
-  error 
+  error,
+  language = 'en'
 }) {
+  // Language-specific UI text
+  const getUIText = (key) => {
+    const translations = {
+      title: {
+        'en': '💬 Slang Explanation',
+        'es': '💬 Explicación de Jerga',
+        'fr': '💬 Explication d\'Argot',
+        'de': '💬 Slang-Erklärung',
+        'pt': '💬 Explicação de Gíria',
+        'it': '💬 Spiegazione di Slang',
+        'ru': '💬 Объяснение Сленга',
+        'zh': '💬 俚语解释',
+        'ja': '💬 スラング説明',
+        'ko': '💬 속어 설명',
+        'ar': '💬 شرح العامية'
+      },
+      phrase: {
+        'en': 'Phrase:',
+        'es': 'Frase:',
+        'fr': 'Phrase:',
+        'de': 'Ausdruck:',
+        'pt': 'Frase:',
+        'it': 'Frase:',
+        'ru': 'Фраза:',
+        'zh': '短语:',
+        'ja': 'フレーズ:',
+        'ko': '구문:',
+        'ar': 'العبارة:'
+      },
+      meaning: {
+        'en': 'Meaning:',
+        'es': 'Significado:',
+        'fr': 'Signification:',
+        'de': 'Bedeutung:',
+        'pt': 'Significado:',
+        'it': 'Significato:',
+        'ru': 'Значение:',
+        'zh': '含义:',
+        'ja': '意味:',
+        'ko': '의미:',
+        'ar': 'المعنى:'
+      },
+      context: {
+        'en': 'Context:',
+        'es': 'Contexto:',
+        'fr': 'Contexte:',
+        'de': 'Kontext:',
+        'pt': 'Contexto:',
+        'it': 'Contesto:',
+        'ru': 'Контекст:',
+        'zh': '语境:',
+        'ja': '文脈:',
+        'ko': '맥락:',
+        'ar': 'السياق:'
+      },
+      example: {
+        'en': 'Example:',
+        'es': 'Ejemplo:',
+        'fr': 'Exemple:',
+        'de': 'Beispiel:',
+        'pt': 'Exemplo:',
+        'it': 'Esempio:',
+        'ru': 'Пример:',
+        'zh': '例子:',
+        'ja': '例:',
+        'ko': '예시:',
+        'ar': 'مثال:'
+      },
+      analyzing: {
+        'en': 'Analyzing slang...',
+        'es': 'Analizando jerga...',
+        'fr': 'Analyse de l\'argot...',
+        'de': 'Slang wird analysiert...',
+        'pt': 'Analisando gíria...',
+        'it': 'Analisi dello slang...',
+        'ru': 'Анализ сленга...',
+        'zh': '分析俚语...',
+        'ja': 'スラングを分析中...',
+        'ko': '속어 분석 중...',
+        'ar': 'تحليل العامية...'
+      },
+      close: {
+        'en': 'Close',
+        'es': 'Cerrar',
+        'fr': 'Fermer',
+        'de': 'Schließen',
+        'pt': 'Fechar',
+        'it': 'Chiudi',
+        'ru': 'Закрыть',
+        'zh': '关闭',
+        'ja': '閉じる',
+        'ko': '닫기',
+        'ar': 'إغلاق'
+      }
+    };
+    
+    return translations[key]?.[language] || translations[key]?.['en'] || key;
+  };
+
   return (
     <Portal>
       <Modal visible={visible} onDismiss={onDismiss} contentContainerStyle={styles.modal}>
         <Card style={styles.card}>
           <Card.Content>
-            <Title style={styles.title}>💬 Slang Explanation</Title>
+            <Title style={styles.title}>{getUIText('title')}</Title>
             
             {slangText && (
               <View style={styles.slangContainer}>
-                <Paragraph style={styles.slangLabel}>Phrase:</Paragraph>
+                <Paragraph style={styles.slangLabel}>{getUIText('phrase')}</Paragraph>
                 <Paragraph style={styles.slangText}>"{slangText}"</Paragraph>
               </View>
             )}
@@ -27,7 +127,7 @@ export default function SlangExplanationModal({
             {isLoading && (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#8B5CF6" />
-                <Paragraph style={styles.loadingText}>Analyzing slang...</Paragraph>
+                <Paragraph style={styles.loadingText}>{getUIText('analyzing')}</Paragraph>
               </View>
             )}
 
@@ -39,19 +139,19 @@ export default function SlangExplanationModal({
 
             {explanation && !isLoading && (
               <ScrollView style={styles.explanationContainer}>
-                <Paragraph style={styles.explanationLabel}>Meaning:</Paragraph>
+                <Paragraph style={styles.explanationLabel}>{getUIText('meaning')}</Paragraph>
                 <Paragraph style={styles.explanationText}>{explanation.meaning}</Paragraph>
                 
                 {explanation.context && (
                   <>
-                    <Paragraph style={styles.explanationLabel}>Context:</Paragraph>
+                    <Paragraph style={styles.explanationLabel}>{getUIText('context')}</Paragraph>
                     <Paragraph style={styles.explanationText}>{explanation.context}</Paragraph>
                   </>
                 )}
 
                 {explanation.example && (
                   <>
-                    <Paragraph style={styles.explanationLabel}>Example:</Paragraph>
+                    <Paragraph style={styles.explanationLabel}>{getUIText('example')}</Paragraph>
                     <Paragraph style={styles.exampleText}>"{explanation.example}"</Paragraph>
                   </>
                 )}
@@ -61,7 +161,7 @@ export default function SlangExplanationModal({
 
           <Card.Actions>
             <Button onPress={onDismiss} mode="contained" style={styles.closeButton}>
-              Close
+              {getUIText('close')}
             </Button>
           </Card.Actions>
         </Card>
